@@ -5,11 +5,48 @@ import { getProduct } from "@/lib/shopify";
 import EnhancedHeader from "@/components/header";
 import EnhancedCartDrawer from "@/components/cart-drawer";
 import AddToCart from "./add-to-cart-client";
+import StructuredData from "@/components/seo/structured-data";
+import { generateSEOMetadata } from "@/components/seo/seo-head";
 
 export const dynamic = "force-dynamic";
 
 interface ProductPageProps {
   params: Promise<{ handle: string }>;
+}
+
+export async function generateMetadata({ params }: ProductPageProps) {
+  const { handle } = await params;
+  const product = await getProduct(handle);
+
+  if (!product) {
+    return generateSEOMetadata({
+      title: "Product niet gevonden",
+      description: "Het opgevraagde product kon niet worden gevonden.",
+    });
+  }
+
+  const currentVariant = product.variants.edges[0]?.node;
+  const mainImage = product.images.edges[0]?.node;
+
+  return generateSEOMetadata({
+    title: `${product.title} - Premium Kwaliteit`,
+    description:
+      product.description ||
+      `Ontdek ${
+        product.title
+      } - Premium kwaliteit lifestyle product van Cocúfum. ${product.tags
+        .slice(0, 3)
+        .join(", ")}.`,
+    keywords: `${product.title}, ${product.tags.join(
+      ", "
+    )}, premium kwaliteit, cocufum`,
+    image: mainImage?.url || "/og-product.jpg",
+    url: `/product/${product.handle}`,
+    type: "product",
+    price: currentVariant?.price.amount,
+    currency: currentVariant?.price.currencyCode || "EUR",
+    brand: "Cocúfum",
+  });
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
@@ -29,13 +66,68 @@ export default async function ProductPage({ params }: ProductPageProps) {
       currency: currencyCode,
     }).format(+amount);
 
+  // Breadcrumb data for structured data
+  const breadcrumbData = [
+    { name: "Home", href: "/" },
+    { name: "Shop", href: "/shop" },
+    { name: product.title, href: `/product/${product.handle}` },
+  ];
+
   return (
     <>
+      {/* SEO Structured Data */}
+      <StructuredData
+        type="product"
+        product={{
+          ...product,
+          images: {
+            ...product.images,
+            edges: product.images.edges.map((edge: any) => ({
+              node: {
+                ...edge.node,
+                altText:
+                  edge.node.altText === null ? undefined : edge.node.altText,
+              },
+            })),
+          },
+        }}
+      />
+      <StructuredData type="breadcrumb" data={breadcrumbData} />
+
       <EnhancedHeader />
       <EnhancedCartDrawer />
 
       {/* 🎯 FIXED: Proper spacing to avoid navbar overlap */}
       <main className="pt-24 lg:pt-32 pb-8 lg:pb-12 min-h-screen bg-gradient-to-br from-stone-50 to-white dark:from-stone-950 dark:to-stone-900">
+        {/* Breadcrumb Navigation */}
+        <div className="container">
+          <nav
+            className="flex items-center space-x-2 text-sm text-stone-600 dark:text-stone-400 mb-6"
+            aria-label="Breadcrumb"
+          >
+            <a
+              href="/"
+              className="hover:text-stone-900 dark:hover:text-stone-100 transition-colors duration-200"
+            >
+              Home
+            </a>
+            <span>/</span>
+            <a
+              href="/shop"
+              className="hover:text-stone-900 dark:hover:text-stone-100 transition-colors duration-200"
+            >
+              Shop
+            </a>
+            <span>/</span>
+            <span
+              className="text-stone-900 dark:text-stone-100 font-medium"
+              aria-current="page"
+            >
+              {product.title}
+            </span>
+          </nav>
+        </div>
+
         <div className="container grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
           {/* Images */}
           <div className="space-y-4">
@@ -47,6 +139,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   fill
                   className="object-cover hover:scale-105 transition-transform duration-700"
                   priority
+                  sizes="(max-width: 768px) 100vw, 50vw"
                 />
               )}
               {/* Gradient overlay for luxury effect */}
@@ -68,6 +161,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                       }
                       fill
                       className="object-cover hover:scale-105 transition-transform duration-500"
+                      sizes="(max-width: 768px) 33vw, 16vw"
                     />
                   </div>
                 ))}
@@ -83,7 +177,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </h1>
 
               <div className="flex items-center space-x-3">
-                <div className="flex items-center">
+                <div
+                  className="flex items-center"
+                  role="img"
+                  aria-label="5 van 5 sterren"
+                >
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
@@ -145,7 +243,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   Gratis Verzending
                 </p>
                 <p className="text-xs text-stone-600 dark:text-stone-400">
-                  Vanaf €50
+                  Vanaf €75
                 </p>
               </div>
 

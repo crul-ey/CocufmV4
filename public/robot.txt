@@ -1,0 +1,49 @@
+# Robots.txt voor Cocúfum E-commerce
+# Optimaal geconfigureerd voor SEO
+
+User-agent: *
+Allow: /
+
+# Belangrijke pagina's voor crawling
+Allow: /shop
+Allow: /product/
+Allow: /cadeaus
+Allow: /contact
+Allow: /search
+
+# Blokkeer admin en private pagina's
+Disallow: /admin/
+Disallow: /api/
+Disallow: /checkout/
+Disallow: /_next/
+Disallow: /.*
+
+# Blokkeer query parameters die duplicate content creëren
+Disallow: /*?*sort=
+Disallow: /*?*filter=
+Disallow: /*?*page=
+
+# Sitemap locatie
+Sitemap: https://cocufum.com/sitemap.xml
+Sitemap: https://cocufum.com/sitemap-products.xml
+Sitemap: https://cocufum.com/sitemap-pages.xml
+
+# Crawl delay (optioneel, alleen als server overbelast raakt)
+# Crawl-delay: 1
+
+# Specifieke bots
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Social media bots voor rich previews
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
