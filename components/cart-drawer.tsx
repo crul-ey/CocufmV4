@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Image from "next/image"
+import { useState } from "react";
+import Image from "next/image";
 import {
   Plus,
   Minus,
@@ -18,151 +18,165 @@ import {
   Clock,
   CheckCircle,
   AlertTriangle,
-} from "lucide-react"
-import { useCart } from "@/contexts/cart-context"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { useToast } from "@/hooks/use-toast"
+} from "lucide-react";
+import { useCart } from "@/contexts/cart-context";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useToast } from "@/hooks/use-toast";
 
 type Price = {
-  amount: string
-  currencyCode: string
-}
+  amount: string;
+  currencyCode: string;
+};
 
-type CartState = "idle" | "updating" | "success" | "error"
+type CartState = "idle" | "updating" | "success" | "error";
 
 export default function PremiumCartDrawer() {
-  const { cart, isOpen, closeCart, removeItem, updateQuantity, isLoading } = useCart()
-  const { toast } = useToast()
-  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set())
-  const [removingItems, setRemovingItems] = useState<Set<string>>(new Set())
-  const [cartState, setCartState] = useState<CartState>("idle")
-  const [celebrationMode, setCelebrationMode] = useState(false)
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState<string | null>(null)
+  const { cart, isOpen, closeCart, removeItem, updateQuantity, isLoading } =
+    useCart();
+  const { toast } = useToast();
+  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
+  const [removingItems, setRemovingItems] = useState<Set<string>>(new Set());
+  const [cartState, setCartState] = useState<CartState>("idle");
+  const [celebrationMode, setCelebrationMode] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState<string | null>(
+    null
+  );
 
   const formatPrice = (amount: string, currencyCode: string) => {
     return new Intl.NumberFormat("nl-NL", {
       style: "currency",
       currency: currencyCode,
-    }).format(Number.parseFloat(amount))
-  }
+    }).format(Number.parseFloat(amount));
+  };
 
   const handleQuantityUpdate = async (lineId: string, newQuantity: number) => {
     if (newQuantity < 1) {
       // If quantity becomes 0, show remove confirmation
-      const item = cartItems.find(({ node }) => node.id === lineId)
+      const item = cartItems.find(({ node }) => node.id === lineId);
       if (item) {
-        setShowRemoveConfirm(lineId)
+        setShowRemoveConfirm(lineId);
       }
-      return
+      return;
     }
 
-    setUpdatingItems((prev) => new Set(prev).add(lineId))
-    setCartState("updating")
+    setUpdatingItems((prev) => new Set(prev).add(lineId));
+    setCartState("updating");
 
     try {
-      await updateQuantity(lineId, newQuantity)
-      setCartState("success")
-      setCelebrationMode(true)
+      await updateQuantity(lineId, newQuantity);
+      setCartState("success");
+      setCelebrationMode(true);
 
       toast({
         title: "🎉 Perfect bijgewerkt!",
         description: "Je winkelwagen is succesvol aangepast.",
         variant: "success",
         duration: 2000,
-      })
+      });
 
       setTimeout(() => {
-        setCelebrationMode(false)
-        setCartState("idle")
-      }, 1500)
+        setCelebrationMode(false);
+        setCartState("idle");
+      }, 1500);
     } catch (error) {
-      setCartState("error")
+      setCartState("error");
       toast({
         title: "❌ Oeps! Er ging iets mis",
         description: "Probeer het nog een keer. Onze excuses!",
         variant: "destructive",
         duration: 3000,
-      })
-      setTimeout(() => setCartState("idle"), 2000)
+      });
+      setTimeout(() => setCartState("idle"), 2000);
     } finally {
       setUpdatingItems((prev) => {
-        const newSet = new Set(prev)
-        newSet.delete(lineId)
-        return newSet
-      })
+        const newSet = new Set(prev);
+        newSet.delete(lineId);
+        return newSet;
+      });
     }
-  }
+  };
 
   const handleRemoveItem = async (lineId: string, productTitle: string) => {
-    setRemovingItems((prev) => new Set(prev).add(lineId))
-    setShowRemoveConfirm(null)
+    setRemovingItems((prev) => new Set(prev).add(lineId));
+    setShowRemoveConfirm(null);
 
     try {
-      await removeItem(lineId)
+      await removeItem(lineId);
       toast({
         title: "🗑️ Product verwijderd",
         description: `${productTitle} is uit je winkelwagen gehaald.`,
         variant: "success",
         duration: 3000,
-      })
+      });
     } catch (error) {
       toast({
         title: "❌ Verwijderen mislukt",
         description: "Er ging iets mis. Probeer het opnieuw.",
         variant: "destructive",
         duration: 3000,
-      })
+      });
     } finally {
       setRemovingItems((prev) => {
-        const newSet = new Set(prev)
-        newSet.delete(lineId)
-        return newSet
-      })
+        const newSet = new Set(prev);
+        newSet.delete(lineId);
+        return newSet;
+      });
     }
-  }
+  };
 
-  const cartItems = cart?.lines.edges || []
+  const cartItems = cart?.lines.edges || [];
 
   // Calculate totals with enhanced logic
   const totals = cartItems.reduce(
     (acc, { node: item }) => {
-      const price = item.merchandise?.price
+      const price = item.merchandise?.price;
       if (price) {
-        const itemTotal = Number.parseFloat(price.amount) * item.quantity
-        acc.subtotal += itemTotal
-        acc.items += item.quantity
+        const itemTotal = Number.parseFloat(price.amount) * item.quantity;
+        acc.subtotal += itemTotal;
+        acc.items += item.quantity;
         if (!acc.currencyCode) {
-          acc.currencyCode = price.currencyCode
+          acc.currencyCode = price.currencyCode;
         }
       }
-      return acc
+      return acc;
     },
-    { subtotal: 0, items: 0, currencyCode: "EUR" },
-  )
+    { subtotal: 0, items: 0, currencyCode: "EUR" }
+  );
 
   // Premium features calculations - UPDATED SHIPPING COSTS
-  const freeShippingThreshold = 75
-  const progressToFreeShipping = Math.min((totals.subtotal / freeShippingThreshold) * 100, 100)
-  const amountToFreeShipping = Math.max(freeShippingThreshold - totals.subtotal, 0)
-  const hasFreeShipping = totals.subtotal >= freeShippingThreshold
+  const freeShippingThreshold = 75;
+  const progressToFreeShipping = Math.min(
+    (totals.subtotal / freeShippingThreshold) * 100,
+    100
+  );
+  const amountToFreeShipping = Math.max(
+    freeShippingThreshold - totals.subtotal,
+    0
+  );
+  const hasFreeShipping = totals.subtotal >= freeShippingThreshold;
 
   // NIEUWE SHIPPING LOGIC - Gebaseerd op je Shopify instellingen
   const calculateShippingCost = () => {
-    if (hasFreeShipping || cartItems.length === 0) return 0
+    if (hasFreeShipping || cartItems.length === 0) return 0;
 
     // €7,90 voor eerste product + €1,00 voor elk extra product
-    const baseShipping = 7.9
-    const additionalItems = Math.max(0, totals.items - 1)
-    const additionalShipping = additionalItems * 1.0
+    const baseShipping = 7.9;
+    const additionalItems = Math.max(0, totals.items - 1);
+    const additionalShipping = additionalItems * 1.0;
 
-    return baseShipping + additionalShipping
-  }
+    return baseShipping + additionalShipping;
+  };
 
-  const shippingCost = calculateShippingCost()
-  const finalTotal = totals.subtotal + shippingCost
+  const shippingCost = calculateShippingCost();
+  const finalTotal = totals.subtotal + shippingCost;
 
   return (
     <>
@@ -185,9 +199,12 @@ export default function PremiumCartDrawer() {
                     )}
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">Premium Winkelwagen</h2>
+                    <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">
+                      Premium Winkelwagen
+                    </h2>
                     <p className="text-sm text-stone-600 dark:text-stone-400">
-                      {cartItems.length} {cartItems.length === 1 ? "product" : "producten"}
+                      {cartItems.length}{" "}
+                      {cartItems.length === 1 ? "product" : "producten"}
                     </p>
                   </div>
                 </div>
@@ -200,7 +217,8 @@ export default function PremiumCartDrawer() {
                   <div className="flex items-center gap-2 mb-2">
                     <Truck className="w-4 h-4 text-blue-600" />
                     <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                      Nog €{amountToFreeShipping.toFixed(2)} voor gratis verzending!
+                      Nog €{amountToFreeShipping.toFixed(2)} voor gratis
+                      verzending!
                     </span>
                   </div>
                   <Progress value={progressToFreeShipping} className="h-2" />
@@ -236,7 +254,8 @@ export default function PremiumCartDrawer() {
                 Je winkelwagen wacht op jou! ✨
               </h3>
               <p className="text-stone-600 dark:text-stone-400 mb-8 max-w-sm leading-relaxed">
-                Ontdek onze premium collectie van zorgvuldig geselecteerde lifestyle producten.
+                Ontdek onze premium collectie van zorgvuldig geselecteerde
+                lifestyle producten.
               </p>
 
               <Button
@@ -267,29 +286,42 @@ export default function PremiumCartDrawer() {
               {/* Cart Items - MOBILE OPTIMIZED */}
               <div className="flex-1 overflow-y-auto py-4 space-y-3 px-1">
                 {cartItems.map(({ node: item }, index) => {
-                  const isUpdating = updatingItems.has(item.id)
-                  const isRemoving = removingItems.has(item.id)
-                  const linePrice = item.merchandise?.price
+                  const isUpdating = updatingItems.has(item.id);
+                  const isRemoving = removingItems.has(item.id);
+                  const linePrice = item.merchandise?.price;
                   const lineTotalAmount = linePrice
-                    ? (Number.parseFloat(linePrice.amount) * item.quantity).toString()
-                    : "0"
+                    ? (
+                        Number.parseFloat(linePrice.amount) * item.quantity
+                      ).toString()
+                    : "0";
 
                   return (
                     <div
                       key={item.id}
-                      className={`group relative p-3 sm:p-4 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm hover:shadow-md transition-all duration-300 ${
-                        isUpdating ? "ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/20" : ""
-                      } ${celebrationMode ? "animate-pulse bg-green-50 dark:bg-green-900/20" : ""} ${
-                        isRemoving ? "opacity-50 scale-95" : ""
-                      }`}
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      className={`relative p-3 sm:p-4 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm hover:shadow-md transition-all duration-300 ${
+                        isUpdating
+                          ? "ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/20"
+                          : ""
+                      } ${
+                        celebrationMode
+                          ? "animate-pulse bg-green-50 dark:bg-green-900/20"
+                          : ""
+                      } ${isRemoving ? "opacity-50 scale-95" : ""}`}
+                      style={{
+                        animationDelay: `${index * 50}ms`,
+                        position: "relative",
+                        isolation: "isolate",
+                      }}
                     >
                       <div className="flex gap-3">
                         {/* Product Image */}
                         <div className="relative w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-700 dark:to-stone-600 rounded-xl overflow-hidden flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
                           {item.merchandise.product.images.edges[0] ? (
                             <Image
-                              src={item.merchandise.product.images.edges[0].node.url || "/placeholder.svg"}
+                              src={
+                                item.merchandise.product.images.edges[0].node
+                                  .url || "/placeholder.svg"
+                              }
                               alt={item.merchandise.product.title}
                               fill
                               className="object-cover"
@@ -308,29 +340,18 @@ export default function PremiumCartDrawer() {
                         </div>
 
                         {/* Product Details */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="flex-1 min-w-0 pr-2">
-                              <h4 className="font-bold text-stone-900 dark:text-stone-100 truncate text-sm sm:text-base">
+                        <div className="flex-1 min-w-0 pr-12">
+                          <div className="mb-2">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-stone-900 dark:text-stone-100 truncate text-sm sm:text-base leading-tight">
                                 {item.merchandise.product.title}
                               </h4>
                               {item.merchandise.title !== "Default Title" && (
-                                <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 font-medium">
+                                <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 font-medium mt-1">
                                   {item.merchandise.title}
                                 </p>
                               )}
                             </div>
-
-                            {/* Remove Button - ALWAYS VISIBLE ON MOBILE */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setShowRemoveConfirm(item.id)}
-                              disabled={isLoading || isRemoving}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-full transition-all duration-300 flex-shrink-0 min-w-[40px] min-h-[40px] touch-manipulation"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
                           </div>
 
                           {/* Quantity Controls & Price - MOBILE OPTIMIZED */}
@@ -339,8 +360,15 @@ export default function PremiumCartDrawer() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleQuantityUpdate(item.id, item.quantity - 1)}
-                                disabled={isUpdating || isLoading || item.quantity <= 1}
+                                onClick={() =>
+                                  handleQuantityUpdate(
+                                    item.id,
+                                    item.quantity - 1
+                                  )
+                                }
+                                disabled={
+                                  isUpdating || isLoading || item.quantity <= 1
+                                }
                                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors touch-manipulation min-w-[32px] min-h-[32px]"
                               >
                                 <Minus className="w-3 h-3" />
@@ -359,7 +387,12 @@ export default function PremiumCartDrawer() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleQuantityUpdate(item.id, item.quantity + 1)}
+                                onClick={() =>
+                                  handleQuantityUpdate(
+                                    item.id,
+                                    item.quantity + 1
+                                  )
+                                }
                                 disabled={isUpdating || isLoading}
                                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors touch-manipulation min-w-[32px] min-h-[32px]"
                               >
@@ -370,11 +403,20 @@ export default function PremiumCartDrawer() {
                             {/* Price */}
                             <div className="text-right">
                               <div className="font-bold text-sm sm:text-base text-stone-900 dark:text-stone-100">
-                                {linePrice ? formatPrice(lineTotalAmount, linePrice.currencyCode) : "€0,00"}
+                                {linePrice
+                                  ? formatPrice(
+                                      lineTotalAmount,
+                                      linePrice.currencyCode
+                                    )
+                                  : "€0,00"}
                               </div>
                               {item.quantity > 1 && linePrice && (
                                 <div className="text-xs text-stone-500 dark:text-stone-400">
-                                  {formatPrice(linePrice.amount, linePrice.currencyCode)} per stuk
+                                  {formatPrice(
+                                    linePrice.amount,
+                                    linePrice.currencyCode
+                                  )}{" "}
+                                  per stuk
                                 </div>
                               )}
                             </div>
@@ -393,8 +435,29 @@ export default function PremiumCartDrawer() {
                           </div>
                         </div>
                       )}
+                      {/* Remove Button - MOBILE FIRST DESIGN */}
+                      <div className="absolute top-2 right-2 z-10">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowRemoveConfirm(item.id);
+                          }}
+                          disabled={isLoading || isRemoving}
+                          className="w-10 h-10 p-0 rounded-full bg-white/90 dark:bg-stone-800/90 backdrop-blur-sm border border-stone-200 dark:border-stone-700 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 shadow-sm hover:shadow-md transition-all duration-200 touch-manipulation flex items-center justify-center"
+                          style={{
+                            minWidth: "44px",
+                            minHeight: "44px",
+                            WebkitTapHighlightColor: "transparent",
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
 
@@ -404,21 +467,37 @@ export default function PremiumCartDrawer() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-stone-600 dark:text-stone-400 text-sm">
                     <span>Subtotaal ({totals.items} items)</span>
-                    <span>{formatPrice(totals.subtotal.toString(), totals.currencyCode)}</span>
+                    <span>
+                      {formatPrice(
+                        totals.subtotal.toString(),
+                        totals.currencyCode
+                      )}
+                    </span>
                   </div>
 
                   <div className="flex justify-between text-stone-600 dark:text-stone-400 text-sm">
                     <span>Verzending</span>
-                    <span className={hasFreeShipping ? "text-green-600 font-medium" : ""}>
-                      {hasFreeShipping ? "GRATIS! 🎉" : `€${shippingCost.toFixed(2)}`}
+                    <span
+                      className={
+                        hasFreeShipping ? "text-green-600 font-medium" : ""
+                      }
+                    >
+                      {hasFreeShipping
+                        ? "GRATIS! 🎉"
+                        : `€${shippingCost.toFixed(2)}`}
                     </span>
                   </div>
 
                   <div className="border-t border-stone-200 dark:border-stone-700 pt-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-lg font-bold text-stone-900 dark:text-stone-100">Totaal</span>
+                      <span className="text-lg font-bold text-stone-900 dark:text-stone-100">
+                        Totaal
+                      </span>
                       <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                        {formatPrice(finalTotal.toString(), totals.currencyCode)}
+                        {formatPrice(
+                          finalTotal.toString(),
+                          totals.currencyCode
+                        )}
                       </span>
                     </div>
                   </div>
@@ -428,15 +507,21 @@ export default function PremiumCartDrawer() {
                 <div className="grid grid-cols-3 gap-2 py-3 border-y border-stone-200 dark:border-stone-700">
                   <div className="text-center">
                     <Shield className="w-4 h-4 text-green-500 mx-auto mb-1" />
-                    <div className="text-xs text-stone-600 dark:text-stone-400">Veilig betalen</div>
+                    <div className="text-xs text-stone-600 dark:text-stone-400">
+                      Veilig betalen
+                    </div>
                   </div>
                   <div className="text-center">
                     <Clock className="w-4 h-4 text-blue-500 mx-auto mb-1" />
-                    <div className="text-xs text-stone-600 dark:text-stone-400">2-3 werkdagen</div>
+                    <div className="text-xs text-stone-600 dark:text-stone-400">
+                      2-3 werkdagen
+                    </div>
                   </div>
                   <div className="text-center">
                     <Gift className="w-4 h-4 text-purple-500 mx-auto mb-1" />
-                    <div className="text-xs text-stone-600 dark:text-stone-400">Gratis retour</div>
+                    <div className="text-xs text-stone-600 dark:text-stone-400">
+                      Gratis retour
+                    </div>
                   </div>
                 </div>
 
@@ -445,13 +530,14 @@ export default function PremiumCartDrawer() {
                   <Button
                     onClick={() => {
                       if (cart?.checkoutUrl) {
-                        window.open(cart.checkoutUrl, "_blank")
+                        window.open(cart.checkoutUrl, "_blank");
                         toast({
                           title: "🚀 Naar checkout!",
-                          description: "Je wordt doorgestuurd naar onze veilige checkout.",
+                          description:
+                            "Je wordt doorgestuurd naar onze veilige checkout.",
                           variant: "success",
                           duration: 2000,
-                        })
+                        });
                       }
                     }}
                     disabled={!cart?.checkoutUrl || isLoading}
@@ -511,9 +597,14 @@ export default function PremiumCartDrawer() {
               </Button>
               <Button
                 onClick={() => {
-                  const item = cartItems.find(({ node }) => node.id === showRemoveConfirm)
+                  const item = cartItems.find(
+                    ({ node }) => node.id === showRemoveConfirm
+                  );
                   if (item) {
-                    handleRemoveItem(showRemoveConfirm, item.node.merchandise.product.title)
+                    handleRemoveItem(
+                      showRemoveConfirm,
+                      item.node.merchandise.product.title
+                    );
                   }
                 }}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white touch-manipulation py-3"
@@ -525,5 +616,5 @@ export default function PremiumCartDrawer() {
         </div>
       )}
     </>
-  )
+  );
 }
