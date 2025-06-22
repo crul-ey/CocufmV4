@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 const heroSlides = [
   {
     id: 1,
-    title: "Zomer Collectie 2024",
+    title: "Zomer Collectie 2025",
     subtitle: "Premium Strandhanddoeken",
     description:
       "Ontdek onze luxe collectie van zachte, absorberende strandhanddoeken. Perfect voor jouw zomervakantie.",
