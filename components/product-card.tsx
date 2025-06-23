@@ -45,9 +45,35 @@ export default function EnhancedProductCard({
     e.preventDefault();
     e.stopPropagation();
 
-    if (!currentVariant?.availableForSale) return;
+    console.log("🧴 Product info:", {
+      title: product.title,
+      tags: product.tags,
+      variant: currentVariant,
+      availableForSale: currentVariant?.availableForSale,
+    });
+
+    if (!currentVariant?.availableForSale) {
+      console.log("❌ Product not available for sale");
+      toast({
+        title: "Niet beschikbaar",
+        description: "Dit product is momenteel niet beschikbaar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!currentVariant?.id) {
+      console.log("❌ No variant ID found");
+      toast({
+        title: "Fout",
+        description: "Product variant niet gevonden.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
+      console.log("🛒 Attempting to add to cart:", currentVariant.id);
       await addItem(currentVariant.id, 1);
       toast({
         title: "Toegevoegd aan winkelwagen! 🛒",
@@ -56,6 +82,7 @@ export default function EnhancedProductCard({
         duration: 3000,
       });
     } catch (error) {
+      console.error("❌ Add to cart failed:", error);
       toast({
         title: "Fout",
         description: "Er ging iets mis bij het toevoegen aan de winkelwagen.",

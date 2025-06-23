@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, Filter, SortAsc, Star } from "lucide-react";
 import ProductCard from "@/components/product-card";
+import ProductCategoryFilter, {
+  type ProductCategory,
+} from "@/components/product-category-filter";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,23 +36,82 @@ export default function ProductGrid({
   const [sortedProducts, setSortedProducts] =
     useState<ShopifyProduct[]>(products);
   const [sortBy, setSortBy] = useState<SortOption>("featured");
-  const [filterTag, setFilterTag] = useState<string>("all");
+  const [selectedCategory, setSelectedCategory] =
+    useState<ProductCategory>("all");
 
-  // Get unique tags from products
-  const allTags = Array.from(
-    new Set(products.flatMap((product) => product.tags))
-  );
-  const availableTags = ["all", ...allTags];
+  // Get unique categories from products
+  const getProductCategory = (product: ShopifyProduct): ProductCategory => {
+    if (product.tags.includes("bigbuy-supplier")) return "sun-protection";
+    if (product.tags.includes("oils-supplier")) return "beauty-oils";
+    if (product.tags.includes("towels-supplier")) return "beach-lifestyle";
+    return "all";
+  };
+
+  const handleCategoryFilter = (
+    category: ProductCategory,
+    filteredProducts: ShopifyProduct[]
+  ) => {
+    setSelectedCategory(category);
+    // Apply current sorting to filtered products
+    const sorted = [...filteredProducts].sort((a, b) => {
+      switch (sortBy) {
+        case "price-low":
+          return (
+            Number.parseFloat(a.priceRange.minVariantPrice.amount) -
+            Number.parseFloat(b.priceRange.minVariantPrice.amount)
+          );
+        case "price-high":
+          return (
+            Number.parseFloat(b.priceRange.minVariantPrice.amount) -
+            Number.parseFloat(a.priceRange.minVariantPrice.amount)
+          );
+        case "name":
+          return a.title.localeCompare(b.title, "nl", { sensitivity: "base" });
+        case "availability":
+          const aAvailable = a.variants.edges.some(
+            (edge) => edge.node.availableForSale
+          )
+            ? 1
+            : 0;
+          const bAvailable = b.variants.edges.some(
+            (edge) => edge.node.availableForSale
+          )
+            ? 1
+            : 0;
+          if (aAvailable !== bAvailable) {
+            return bAvailable - aAvailable;
+          }
+          return a.title.localeCompare(b.title, "nl", { sensitivity: "base" });
+        default:
+          const aHasAvailable = a.variants.edges.some(
+            (edge) => edge.node.availableForSale
+          )
+            ? 1
+            : 0;
+          const bHasAvailable = b.variants.edges.some(
+            (edge) => edge.node.availableForSale
+          )
+            ? 1
+            : 0;
+          if (aHasAvailable !== bHasAvailable) {
+            return bHasAvailable - aHasAvailable;
+          }
+          return 0;
+      }
+    });
+    setSortedProducts(sorted);
+  };
 
   useEffect(() => {
+    // Re-apply current category filter when sort changes
     let filtered = products;
 
-    // Apply tag filter
-    if (filterTag !== "all") {
-      filtered = products.filter((product) => product.tags.includes(filterTag));
+    if (selectedCategory !== "all") {
+      filtered = products.filter(
+        (product) => getProductCategory(product) === selectedCategory
+      );
     }
 
-    // Apply sorting
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "price-low":
@@ -65,7 +127,6 @@ export default function ProductGrid({
         case "name":
           return a.title.localeCompare(b.title, "nl", { sensitivity: "base" });
         case "availability":
-          // Sort by variants availability
           const aAvailable = a.variants.edges.some(
             (edge) => edge.node.availableForSale
           )
@@ -79,10 +140,8 @@ export default function ProductGrid({
           if (aAvailable !== bAvailable) {
             return bAvailable - aAvailable;
           }
-          // If same availability, sort by title
           return a.title.localeCompare(b.title, "nl", { sensitivity: "base" });
         default:
-          // Featured - keep original Shopify order but prioritize available products
           const aHasAvailable = a.variants.edges.some(
             (edge) => edge.node.availableForSale
           )
@@ -96,12 +155,12 @@ export default function ProductGrid({
           if (aHasAvailable !== bHasAvailable) {
             return bHasAvailable - aHasAvailable;
           }
-          return 0; // Keep original order
+          return 0;
       }
     });
 
     setSortedProducts(sorted);
-  }, [products, sortBy, filterTag]);
+  }, [products, sortBy, selectedCategory]);
 
   const sortOptions = [
     { value: "featured" as const, label: "Uitgelicht", icon: Star },
@@ -131,58 +190,50 @@ export default function ProductGrid({
       )}
 
       {showFilters && (
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-          {/* Tag Filters */}
-          <div className="flex flex-wrap gap-2">
-            {availableTags.slice(0, 6).map((tag) => (
-              <Button
-                key={tag}
-                variant={filterTag === tag ? "default" : "outline"}
-                size="sm"
-                onClick={() => setFilterTag(tag)}
-                className="capitalize hover:scale-105 transition-transform duration-200"
-              >
-                {tag === "all" ? "Alle producten" : tag}
-              </Button>
-            ))}
-            {availableTags.length > 6 && (
-              <span className="text-sm text-stone-500 dark:text-stone-400 self-center">
-                +{availableTags.length - 6} meer
-              </span>
-            )}
-          </div>
+        <div className="space-y-4">
+          {/* Category Filter */}
+          <ProductCategoryFilter
+            products={products}
+            activeCategory={selectedCategory}
+            onFilterChangeAction={handleCategoryFilter}
+          />
 
           {/* Sort Dropdown */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-stone-600 dark:text-stone-400" />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-w-[180px] justify-between hover:bg-stone-50 dark:hover:bg-stone-800"
-                >
-                  {sortOptions.find((option) => option.value === sortBy)?.label}
-                  <ChevronDown className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {sortOptions.map((option) => (
-                  <DropdownMenuItem
-                    key={option.value}
-                    onClick={() => setSortBy(option.value)}
-                    className={`cursor-pointer ${
-                      sortBy === option.value
-                        ? "bg-stone-100 dark:bg-stone-800"
-                        : ""
-                    }`}
+          <div className="flex justify-end">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-stone-600 dark:text-stone-400" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-w-[180px] justify-between hover:bg-stone-50 dark:hover:bg-stone-800"
                   >
-                    <option.icon className="w-4 h-4 mr-2" />
-                    {option.label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    {
+                      sortOptions.find((option) => option.value === sortBy)
+                        ?.label
+                    }
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {sortOptions.map((option) => (
+                    <DropdownMenuItem
+                      key={option.value}
+                      onClick={() => setSortBy(option.value)}
+                      className={`cursor-pointer ${
+                        sortBy === option.value
+                          ? "bg-stone-100 dark:bg-stone-800"
+                          : ""
+                      }`}
+                    >
+                      <option.icon className="w-4 h-4 mr-2" />
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       )}
@@ -192,7 +243,7 @@ export default function ProductGrid({
         <span>
           {sortedProducts.length} product
           {sortedProducts.length !== 1 ? "en" : ""} gevonden
-          {filterTag !== "all" && ` in "${filterTag}"`}
+          {selectedCategory !== "all" && ` in geselecteerde categorie`}
         </span>
         <span className="hidden sm:block">
           Gesorteerd op:{" "}
@@ -230,13 +281,16 @@ export default function ProductGrid({
             <Button
               variant="outline"
               onClick={() => {
-                setFilterTag("all");
+                setSelectedCategory("all");
                 setSortBy("featured");
               }}
             >
               Alle filters wissen
             </Button>
-            <Button variant="outline" onClick={() => setFilterTag("all")}>
+            <Button
+              variant="outline"
+              onClick={() => setSelectedCategory("all")}
+            >
               Toon alle producten
             </Button>
           </div>

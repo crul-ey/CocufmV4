@@ -31,6 +31,7 @@ export interface ShopifyProduct {
   title: string
   description: string
   handle: string
+  vendor?: string
   images: {
     edges: Array<{ node: { url: string; altText: string | null } }>
   }
@@ -61,7 +62,9 @@ export interface ShopifyCart {
           product: {
             title: string
             handle: string
+            vendor?: string
             images: { edges: Array<{ node: { url: string; altText: string | null } }> }
+            tags: string[]
           }
           price: { amount: string; currencyCode: string }
         }
@@ -85,15 +88,31 @@ async function shopifyFetch<T>(query: string, variables?: Record<string, unknown
       "X-Shopify-Storefront-Access-Token": SHOPIFY_TOKEN!,
     },
     body: JSON.stringify({ query, variables }),
-    cache: "no-store",
+    cache: "no-store", // Ensure fresh data for cart operations
   })
 
-  if (!res.ok) throw new Error(`Shopify error ${res.status}`)
+  if (!res.ok) {
+    const errorBody = await res.text()
+    console.error("Shopify API Error Response:", errorBody)
+    throw new Error(`Shopify error ${res.status}: ${errorBody}`)
+  }
 
-  const { data, errors } = (await res.json()) as { data: T; errors?: Array<{ message: string }> }
+  const { data, errors } = (await res.json()) as { data: T; errors?: Array<{ message: string; extensions?: any }> }
 
-  if (errors?.length) throw new Error(errors[0].message)
-
+  if (errors?.length) {
+    console.error("Shopify GraphQL Errors:", JSON.stringify(errors, null, 2))
+    // Potentially include more error details if available
+    const errorMessages = errors
+      .map((err) => {
+        let msg = err.message
+        if (err.extensions && err.extensions.problems) {
+          msg += ` Problems: ${JSON.stringify(err.extensions.problems)}`
+        }
+        return msg
+      })
+      .join("; ")
+    throw new Error(errorMessages)
+  }
   return data
 }
 
@@ -102,7 +121,7 @@ async function shopifyFetch<T>(query: string, variables?: Record<string, unknown
 /* -------------------------------------------------------------------- */
 export async function getProducts(first = 20): Promise<ShopifyProduct[]> {
   const query = /* GraphQL */ `
-    query ($first: Int!) {
+    query getProducts($first: Int!) {
       products(first: $first) {
         edges {
           node {
@@ -110,6 +129,7 @@ export async function getProducts(first = 20): Promise<ShopifyProduct[]> {
             title
             description
             handle
+            vendor
             images(first: 5) { edges { node { url altText } } }
             priceRange { minVariantPrice { amount currencyCode } }
             variants(first: 1) {
@@ -119,6 +139,7 @@ export async function getProducts(first = 20): Promise<ShopifyProduct[]> {
                   title
                   price { amount currencyCode }
                   availableForSale
+                  quantityAvailable
                 }
               }
             }
@@ -134,12 +155,13 @@ export async function getProducts(first = 20): Promise<ShopifyProduct[]> {
 
 export async function getProduct(handle: string): Promise<ShopifyProduct | null> {
   const query = /* GraphQL */ `
-    query ($handle: String!) {
+    query getProduct($handle: String!) {
       product(handle: $handle) {
         id
         title
         description
         handle
+        vendor
         images(first: 10) { edges { node { url altText } } }
         priceRange { minVariantPrice { amount currencyCode } }
         variants(first: 10) {
@@ -149,6 +171,7 @@ export async function getProduct(handle: string): Promise<ShopifyProduct | null>
               title
               price { amount currencyCode }
               availableForSale
+              quantityAvailable
             }
           }
         }
@@ -160,9 +183,9 @@ export async function getProduct(handle: string): Promise<ShopifyProduct | null>
   return data.product
 }
 
-export async function searchProducts(query: string, first = 20): Promise<ShopifyProduct[]> {
+export async function searchProducts(queryText: string, first = 20): Promise<ShopifyProduct[]> {
   const searchQuery = /* GraphQL */ `
-    query ($query: String!, $first: Int!) {
+    query searchProducts($query: String!, $first: Int!) {
       products(first: $first, query: $query) {
         edges {
           node {
@@ -170,6 +193,7 @@ export async function searchProducts(query: string, first = 20): Promise<Shopify
             title
             description
             handle
+            vendor
             images(first: 5) { edges { node { url altText } } }
             priceRange { minVariantPrice { amount currencyCode } }
             variants(first: 1) {
@@ -179,6 +203,7 @@ export async function searchProducts(query: string, first = 20): Promise<Shopify
                   title
                   price { amount currencyCode }
                   availableForSale
+                  quantityAvailable
                 }
               }
             }
@@ -188,188 +213,154 @@ export async function searchProducts(query: string, first = 20): Promise<Shopify
       }
     }
   `
-
-  // Format the search query for Shopify
-  const formattedQuery = `title:*${query}* OR tag:*${query}* OR product_type:*${query}*`
-
+  const formattedQuery = `title:*${queryText}* OR tag:*${queryText}* OR product_type:*${queryText}*`
   const data = await shopifyFetch<{ products: { edges: Array<{ node: ShopifyProduct }> } }>(searchQuery, {
     query: formattedQuery,
     first,
   })
-
   return data.products.edges.map((e) => e.node)
 }
 
 /* -------------------------------------------------------------------- */
 /*  5. CART MUTATIONS / QUERIES                                         */
 /* -------------------------------------------------------------------- */
+const CartFieldsFragment = /* GraphQL */ `
+  fragment CartFields on Cart {
+    id
+    checkoutUrl
+    cost { totalAmount { amount currencyCode } }
+    lines(first: 100) {
+      edges {
+        node {
+          id
+          quantity
+          merchandise {
+            ... on ProductVariant {
+              id
+              title
+              price { amount currencyCode }
+              product {
+                title
+                handle
+                vendor
+                tags
+                images(first: 1) { edges { node { url altText } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`
+
 export async function createCart(): Promise<string> {
+  console.log("🛒 Creating new Shopify cart...")
   const query = /* GraphQL */ `
-    mutation {
+    mutation cartCreate {
       cartCreate {
         cart { id }
-        userErrors { field message }
+        userErrors { field message code }
       }
     }
   `
-  const data = await shopifyFetch<{ cartCreate: { cart: { id: string } } }>(query)
+  const data = await shopifyFetch<{ cartCreate: { cart: { id: string }; userErrors: any[] } }>(query)
+  if (data.cartCreate.userErrors?.length) {
+    console.error("❌ Shopify cartCreate UserErrors:", data.cartCreate.userErrors)
+    throw new Error(data.cartCreate.userErrors.map((e) => e.message).join(", "))
+  }
+  console.log("✅ New Shopify cart created:", data.cartCreate.cart.id)
   return data.cartCreate.cart.id
 }
 
 export async function addToCart(cartId: string, variantId: string, quantity = 1): Promise<ShopifyCart> {
+  console.log("🔗 Shopify addToCart called:", { cartId, variantId, quantity })
   const query = /* GraphQL */ `
-    mutation ($cartId: ID!, $lines: [CartLineInput!]!) {
+    mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
       cartLinesAdd(cartId: $cartId, lines: $lines) {
         cart { ...CartFields }
-        userErrors { field message }
+        userErrors { field message code }
       }
     }
-
-    fragment CartFields on Cart {
-      id
-      checkoutUrl
-      cost { totalAmount { amount currencyCode } }
-      lines(first: 100) {
-        edges {
-          node {
-            id
-            quantity
-            merchandise {
-              ... on ProductVariant {
-                id
-                title
-                price { amount currencyCode }
-                product {
-                  title
-                  handle
-                  images(first: 1) { edges { node { url altText } } }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    ${CartFieldsFragment}
   `
   const variables = { cartId, lines: [{ merchandiseId: variantId, quantity }] }
-  const data = await shopifyFetch<{ cartLinesAdd: { cart: ShopifyCart } }>(query, variables)
+  const data = await shopifyFetch<{ cartLinesAdd: { cart: ShopifyCart; userErrors: any[] } }>(query, variables)
+
+  if (data.cartLinesAdd.userErrors?.length) {
+    console.error("❌ Shopify cartLinesAdd UserErrors:", data.cartLinesAdd.userErrors)
+    // Handle specific errors like "merchandise ID is invalid" or "cart ID is invalid"
+    const errorMessages = data.cartLinesAdd.userErrors
+      .map((e) => `${e.code}: ${e.message} (Field: ${e.field})`)
+      .join(", ")
+    throw new Error(errorMessages)
+  }
+  console.log("✅ Shopify addToCart success for cart:", cartId)
   return data.cartLinesAdd.cart
 }
 
 export async function getCart(cartId: string): Promise<ShopifyCart | null> {
+  console.log("🛒 Getting Shopify cart:", cartId)
   const query = /* GraphQL */ `
-    query ($cartId: ID!) {
+    query getCart($cartId: ID!) {
       cart(id: $cartId) {
         ...CartFields
       }
     }
-
-    fragment CartFields on Cart {
-      id
-      checkoutUrl
-      cost { totalAmount { amount currencyCode } }
-      lines(first: 100) {
-        edges {
-          node {
-            id
-            quantity
-            merchandise {
-              ... on ProductVariant {
-                id
-                title
-                price { amount currencyCode }
-                product {
-                  title
-                  handle
-                  images(first: 1) { edges { node { url altText } } }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    ${CartFieldsFragment}
   `
-  const data = await shopifyFetch<{ cart: ShopifyCart | null }>(query, { cartId })
-  return data.cart
+  try {
+    const data = await shopifyFetch<{ cart: ShopifyCart | null }>(query, { cartId })
+    if (data.cart) {
+      console.log("✅ Shopify cart retrieved:", cartId)
+    } else {
+      console.warn("⚠️ Shopify cart not found or invalid:", cartId)
+    }
+    return data.cart
+  } catch (error) {
+    console.error("❌ Error fetching Shopify cart:", cartId, error)
+    return null // Return null if cart fetch fails, so a new one can be created
+  }
 }
 
 export async function removeFromCart(cartId: string, lineId: string): Promise<ShopifyCart> {
+  console.log("🗑️ Removing from Shopify cart:", { cartId, lineId })
   const query = /* GraphQL */ `
-    mutation ($cartId: ID!, $lineIds: [ID!]!) {
+    mutation cartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
       cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
         cart { ...CartFields }
-        userErrors { field message }
+        userErrors { field message code }
       }
     }
-
-    fragment CartFields on Cart {
-      id
-      checkoutUrl
-      cost { totalAmount { amount currencyCode } }
-      lines(first: 100) {
-        edges {
-          node {
-            id
-            quantity
-            merchandise {
-              ... on ProductVariant {
-                id
-                title
-                price { amount currencyCode }
-                product {
-                  title
-                  handle
-                  images(first: 1) { edges { node { url altText } } }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    ${CartFieldsFragment}
   `
   const variables = { cartId, lineIds: [lineId] }
-  const data = await shopifyFetch<{ cartLinesRemove: { cart: ShopifyCart } }>(query, variables)
+  const data = await shopifyFetch<{ cartLinesRemove: { cart: ShopifyCart; userErrors: any[] } }>(query, variables)
+  if (data.cartLinesRemove.userErrors?.length) {
+    console.error("❌ Shopify cartLinesRemove UserErrors:", data.cartLinesRemove.userErrors)
+    throw new Error(data.cartLinesRemove.userErrors.map((e) => e.message).join(", "))
+  }
+  console.log("✅ Shopify removeFromCart success for cart:", cartId)
   return data.cartLinesRemove.cart
 }
 
 export async function updateCartLine(cartId: string, lineId: string, quantity: number): Promise<ShopifyCart> {
+  console.log("🔄 Updating Shopify cart line:", { cartId, lineId, quantity })
   const query = /* GraphQL */ `
-    mutation ($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
+    mutation cartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
       cartLinesUpdate(cartId: $cartId, lines: $lines) {
         cart { ...CartFields }
-        userErrors { field message }
+        userErrors { field message code }
       }
     }
-
-    fragment CartFields on Cart {
-      id
-      checkoutUrl
-      cost { totalAmount { amount currencyCode } }
-      lines(first: 100) {
-        edges {
-          node {
-            id
-            quantity
-            merchandise {
-              ... on ProductVariant {
-                id
-                title
-                price { amount currencyCode }
-                product {
-                  title
-                  handle
-                  images(first: 1) { edges { node { url altText } } }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    ${CartFieldsFragment}
   `
   const variables = { cartId, lines: [{ id: lineId, quantity }] }
-  const data = await shopifyFetch<{ cartLinesUpdate: { cart: ShopifyCart } }>(query, variables)
+  const data = await shopifyFetch<{ cartLinesUpdate: { cart: ShopifyCart; userErrors: any[] } }>(query, variables)
+  if (data.cartLinesUpdate.userErrors?.length) {
+    console.error("❌ Shopify cartLinesUpdate UserErrors:", data.cartLinesUpdate.userErrors)
+    throw new Error(data.cartLinesUpdate.userErrors.map((e) => e.message).join(", "))
+  }
+  console.log("✅ Shopify updateCartLine success for cart:", cartId)
   return data.cartLinesUpdate.cart
 }

@@ -14,8 +14,8 @@ import {
   ArrowRight,
   Package,
   Clock,
-  CheckCircle,
   X,
+  Info,
 } from "lucide-react";
 import { useCart } from "@/contexts/cart-context";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,16 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
+import {
+  shippingCalculator,
+  formatPrice,
+  getSupplierColor,
+} from "@/lib/shipping-calculator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 type Price = {
   amount: string;
@@ -44,13 +54,7 @@ export default function PremiumCartDrawer() {
   const [removingItems, setRemovingItems] = useState<Set<string>>(new Set());
   const [cartState, setCartState] = useState<CartState>("idle");
   const [celebrationMode, setCelebrationMode] = useState(false);
-
-  const formatPrice = (amount: string, currencyCode: string) => {
-    return new Intl.NumberFormat("nl-NL", {
-      style: "currency",
-      currency: currencyCode,
-    }).format(Number.parseFloat(amount));
-  };
+  const [showShippingDetails, setShowShippingDetails] = useState(false);
 
   const handleQuantityUpdate = async (lineId: string, newQuantity: number) => {
     if (newQuantity < 1) {
@@ -132,49 +136,9 @@ export default function PremiumCartDrawer() {
 
   const cartItems = cart?.lines.edges || [];
 
-  // Calculate totals with enhanced logic
-  const totals = cartItems.reduce(
-    (acc, { node: item }) => {
-      const price = item.merchandise?.price;
-      if (price) {
-        const itemTotal = Number.parseFloat(price.amount) * item.quantity;
-        acc.subtotal += itemTotal;
-        acc.items += item.quantity;
-        if (!acc.currencyCode) {
-          acc.currencyCode = price.currencyCode;
-        }
-      }
-      return acc;
-    },
-    { subtotal: 0, items: 0, currencyCode: "EUR" }
-  );
-
-  // Premium features calculations - UPDATED SHIPPING COSTS
-  const freeShippingThreshold = 75;
-  const progressToFreeShipping = Math.min(
-    (totals.subtotal / freeShippingThreshold) * 100,
-    100
-  );
-  const amountToFreeShipping = Math.max(
-    freeShippingThreshold - totals.subtotal,
-    0
-  );
-  const hasFreeShipping = totals.subtotal >= freeShippingThreshold;
-
-  // NIEUWE SHIPPING LOGIC - Gebaseerd op je Shopify instellingen
-  const calculateShippingCost = () => {
-    if (hasFreeShipping || cartItems.length === 0) return 0;
-
-    // €7,90 voor eerste product + €1,00 voor elk extra product
-    const baseShipping = 7.9;
-    const additionalItems = Math.max(0, totals.items - 1);
-    const additionalShipping = additionalItems * 1.0;
-
-    return baseShipping + additionalShipping;
-  };
-
-  const shippingCost = calculateShippingCost();
-  const finalTotal = totals.subtotal + shippingCost;
+  // 🚚 NIEUWE SHIPPING CALCULATION
+  const shippingInfo = shippingCalculator.calculateShippingCosts(cartItems);
+  const finalTotal = shippingInfo.totalSubtotal + shippingInfo.totalShipping;
 
   return (
     <Sheet open={isOpen} onOpenChange={closeCart}>
@@ -191,7 +155,7 @@ export default function PremiumCartDrawer() {
                   <ShoppingBag className="w-6 h-6 text-stone-900 dark:text-stone-100" />
                   {cartItems.length > 0 && (
                     <Badge className="absolute -top-2 -right-2 w-5 h-5 p-0 flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xs animate-pulse">
-                      {totals.items}
+                      {shippingInfo.totalItems}
                     </Badge>
                   )}
                 </div>
@@ -208,27 +172,91 @@ export default function PremiumCartDrawer() {
               <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
             </SheetTitle>
 
-            {/* Free Shipping Progress */}
-            {!hasFreeShipping && cartItems.length > 0 && (
-              <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 rounded-xl border border-blue-200 dark:border-blue-700">
-                <div className="flex items-center gap-2 mb-2">
-                  <Truck className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                    Nog €{amountToFreeShipping.toFixed(2)} voor gratis
-                    verzending!
-                  </span>
-                </div>
-                <Progress value={progressToFreeShipping} className="h-2" />
-              </div>
-            )}
+            {/* 🚚 MULTI-SUPPLIER SHIPPING PROGRESS */}
+            {cartItems.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {shippingInfo.supplierCosts.map((supplierInfo, index) => (
+                  <div
+                    key={supplierInfo.supplier.id}
+                    className={`p-3 rounded-xl border ${
+                      supplierInfo.hasFreeShipping
+                        ? "bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700"
+                        : "bg-gradient-to-r from-blue-50 to-orange-50 dark:from-blue-900/20 dark:to-orange-900/20 border-blue-200 dark:border-blue-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">
+                          {supplierInfo.supplier.icon}
+                        </span>
+                        <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                          {supplierInfo.supplier.name}
+                        </span>
+                        <Badge
+                          className={getSupplierColor(
+                            supplierInfo.supplier.color
+                          )}
+                        >
+                          {supplierInfo.itemCount} items
+                        </Badge>
+                      </div>
+                      <div className="text-sm font-bold text-stone-900 dark:text-stone-100">
+                        {supplierInfo.hasFreeShipping ? (
+                          <span className="text-green-600">GRATIS! 🎉</span>
+                        ) : (
+                          formatPrice(supplierInfo.shippingCost)
+                        )}
+                      </div>
+                    </div>
 
-            {hasFreeShipping && cartItems.length > 0 && (
-              <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-700">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-green-900 dark:text-green-100">
-                    🎉 Je krijgt gratis verzending!
-                  </span>
+                    {!supplierInfo.hasFreeShipping && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-stone-600 dark:text-stone-400">
+                          <span>
+                            Nog {formatPrice(supplierInfo.amountToFreeShipping)}{" "}
+                            voor gratis verzending
+                          </span>
+                          <span>
+                            {Math.round(
+                              (supplierInfo.subtotal /
+                                supplierInfo.supplier.shippingRule
+                                  .freeShippingThreshold) *
+                                100
+                            )}
+                            %
+                          </span>
+                        </div>
+                        <Progress
+                          value={
+                            (supplierInfo.subtotal /
+                              supplierInfo.supplier.shippingRule
+                                .freeShippingThreshold) *
+                            100
+                          }
+                          className="h-1.5"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Total Shipping Summary */}
+                <div className="p-3 bg-gradient-to-r from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-700 rounded-xl border border-stone-300 dark:border-stone-600">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-stone-600 dark:text-stone-400" />
+                      <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                        Totale verzendkosten
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold text-stone-900 dark:text-stone-100">
+                      {shippingInfo.hasFreeShipping ? (
+                        <span className="text-green-600">GRATIS! 🎉</span>
+                      ) : (
+                        formatPrice(shippingInfo.totalShipping)
+                      )}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -280,166 +308,186 @@ export default function PremiumCartDrawer() {
           </div>
         ) : (
           <>
-            {/* Cart Items - SIMPLIFIED MOBILE DESIGN */}
+            {/* Cart Items - GROUPED BY SUPPLIER */}
             <div className="flex-1 overflow-y-auto py-4 space-y-4 px-1">
-              {cartItems.map(({ node: item }, index) => {
-                const isUpdating = updatingItems.has(item.id);
-                const isRemoving = removingItems.has(item.id);
-                const linePrice = item.merchandise?.price;
-                const lineTotalAmount = linePrice
-                  ? (
-                      Number.parseFloat(linePrice.amount) * item.quantity
-                    ).toString()
-                  : "0";
+              {shippingInfo.supplierCosts.map((supplierInfo, supplierIndex) => (
+                <div key={supplierInfo.supplier.id} className="space-y-3">
+                  {/* Supplier Header */}
+                  <div className="flex items-center gap-2 px-2">
+                    <span className="text-lg">
+                      {supplierInfo.supplier.icon}
+                    </span>
+                    <span className="text-sm font-bold text-stone-700 dark:text-stone-300">
+                      {supplierInfo.supplier.name}
+                    </span>
+                    <Badge
+                      className={getSupplierColor(supplierInfo.supplier.color)}
+                    >
+                      {supplierInfo.itemCount} items
+                    </Badge>
+                    <div className="flex-1" />
+                    <span className="text-xs text-stone-500 dark:text-stone-400">
+                      {supplierInfo.supplier.shippingRule.description}
+                    </span>
+                  </div>
 
-                return (
-                  <div
-                    key={item.id}
-                    className={`p-4 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm transition-all duration-300 ${
-                      isUpdating
-                        ? "ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/20"
-                        : ""
-                    } ${
-                      celebrationMode
-                        ? "animate-pulse bg-green-50 dark:bg-green-900/20"
-                        : ""
-                    } ${isRemoving ? "opacity-50 scale-95" : ""}`}
-                  >
-                    {/* Product Header with Remove Button */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex gap-3 flex-1 min-w-0">
-                        {/* Product Image */}
-                        <div className="relative w-16 h-16 bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-700 dark:to-stone-600 rounded-xl overflow-hidden flex-shrink-0">
-                          {item.merchandise.product.images.edges[0] ? (
-                            <Image
-                              src={
-                                item.merchandise.product.images.edges[0].node
-                                  .url || "/placeholder.svg"
+                  {/* Supplier Items */}
+                  {supplierInfo.items.map(({ node: item }, index) => {
+                    const isUpdating = updatingItems.has(item.id);
+                    const isRemoving = removingItems.has(item.id);
+                    const linePrice = item.merchandise?.price;
+                    const lineTotalAmount = linePrice
+                      ? (
+                          Number.parseFloat(linePrice.amount) * item.quantity
+                        ).toString()
+                      : "0";
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-4 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm transition-all duration-300 ${
+                          isUpdating
+                            ? "ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/20"
+                            : ""
+                        } ${
+                          celebrationMode
+                            ? "animate-pulse bg-green-50 dark:bg-green-900/20"
+                            : ""
+                        } ${isRemoving ? "opacity-50 scale-95" : ""}`}
+                      >
+                        {/* Product Header with Remove Button */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex gap-3 flex-1 min-w-0">
+                            {/* Product Image */}
+                            <div className="relative w-16 h-16 bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-700 dark:to-stone-600 rounded-xl overflow-hidden flex-shrink-0">
+                              {item.merchandise.product.images.edges[0] ? (
+                                <Image
+                                  src={
+                                    item.merchandise.product.images.edges[0]
+                                      .node.url || "/placeholder.svg"
+                                  }
+                                  alt={item.merchandise.product.title}
+                                  fill
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Package className="w-6 h-6 text-stone-400" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Product Info */}
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-stone-900 dark:text-stone-100 text-sm leading-tight mb-1">
+                                {item.merchandise.product.title}
+                              </h4>
+                              {item.merchandise.title !== "Default Title" && (
+                                <p className="text-xs text-stone-600 dark:text-stone-400">
+                                  {item.merchandise.title}
+                                </p>
+                              )}
+                              <div className="font-bold text-stone-900 dark:text-stone-100 text-sm mt-1">
+                                {linePrice
+                                  ? formatPrice(
+                                      Number.parseFloat(lineTotalAmount)
+                                    )
+                                  : "€0,00"}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* SIMPLE REMOVE BUTTON */}
+                          <button
+                            onClick={() =>
+                              handleRemoveItem(
+                                item.id,
+                                item.merchandise.product.title
+                              )
+                            }
+                            disabled={isLoading || isRemoving}
+                            className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/20 text-red-600 hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center flex-shrink-0 ml-2"
+                            style={{
+                              minWidth: "44px",
+                              minHeight: "44px",
+                              WebkitTapHighlightColor: "transparent",
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Quantity Controls */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center bg-stone-100 dark:bg-stone-700 rounded-full p-1">
+                            <button
+                              onClick={() =>
+                                handleQuantityUpdate(item.id, item.quantity - 1)
                               }
-                              alt={item.merchandise.product.title}
-                              fill
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package className="w-6 h-6 text-stone-400" />
+                              disabled={
+                                isUpdating || isLoading || item.quantity <= 1
+                              }
+                              className="w-10 h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center"
+                              style={{
+                                minWidth: "44px",
+                                minHeight: "44px",
+                                WebkitTapHighlightColor: "transparent",
+                              }}
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+
+                            <div className="w-12 text-center">
+                              {isUpdating ? (
+                                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                              ) : (
+                                <span className="font-bold text-stone-900 dark:text-stone-100">
+                                  {item.quantity}
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() =>
+                                handleQuantityUpdate(item.id, item.quantity + 1)
+                              }
+                              disabled={isUpdating || isLoading}
+                              className="w-10 h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center"
+                              style={{
+                                minWidth: "44px",
+                                minHeight: "44px",
+                                WebkitTapHighlightColor: "transparent",
+                              }}
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {/* Unit Price */}
+                          {item.quantity > 1 && linePrice && (
+                            <div className="text-xs text-stone-500 dark:text-stone-400">
+                              {formatPrice(Number.parseFloat(linePrice.amount))}{" "}
+                              per stuk
                             </div>
                           )}
                         </div>
 
-                        {/* Product Info */}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-stone-900 dark:text-stone-100 text-sm leading-tight mb-1">
-                            {item.merchandise.product.title}
-                          </h4>
-                          {item.merchandise.title !== "Default Title" && (
-                            <p className="text-xs text-stone-600 dark:text-stone-400">
-                              {item.merchandise.title}
-                            </p>
-                          )}
-                          <div className="font-bold text-stone-900 dark:text-stone-100 text-sm mt-1">
-                            {linePrice
-                              ? formatPrice(
-                                  lineTotalAmount,
-                                  linePrice.currencyCode
-                                )
-                              : "€0,00"}
+                        {/* Loading Overlay */}
+                        {(isUpdating || isRemoving) && (
+                          <div className="absolute inset-0 bg-white/80 dark:bg-stone-800/80 rounded-2xl flex items-center justify-center">
+                            <div className="flex items-center gap-2 text-blue-600">
+                              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                              <span className="text-sm font-medium">
+                                {isRemoving ? "Verwijderen..." : "Bijwerken..."}
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
-
-                      {/* SIMPLE REMOVE BUTTON */}
-                      <button
-                        onClick={() =>
-                          handleRemoveItem(
-                            item.id,
-                            item.merchandise.product.title
-                          )
-                        }
-                        disabled={isLoading || isRemoving}
-                        className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/20 text-red-600 hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center flex-shrink-0 ml-2"
-                        style={{
-                          minWidth: "44px",
-                          minHeight: "44px",
-                          WebkitTapHighlightColor: "transparent",
-                        }}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Quantity Controls */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center bg-stone-100 dark:bg-stone-700 rounded-full p-1">
-                        <button
-                          onClick={() =>
-                            handleQuantityUpdate(item.id, item.quantity - 1)
-                          }
-                          disabled={
-                            isUpdating || isLoading || item.quantity <= 1
-                          }
-                          className="w-10 h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center"
-                          style={{
-                            minWidth: "44px",
-                            minHeight: "44px",
-                            WebkitTapHighlightColor: "transparent",
-                          }}
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-
-                        <div className="w-12 text-center">
-                          {isUpdating ? (
-                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                          ) : (
-                            <span className="font-bold text-stone-900 dark:text-stone-100">
-                              {item.quantity}
-                            </span>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() =>
-                            handleQuantityUpdate(item.id, item.quantity + 1)
-                          }
-                          disabled={isUpdating || isLoading}
-                          className="w-10 h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center"
-                          style={{
-                            minWidth: "44px",
-                            minHeight: "44px",
-                            WebkitTapHighlightColor: "transparent",
-                          }}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* Unit Price */}
-                      {item.quantity > 1 && linePrice && (
-                        <div className="text-xs text-stone-500 dark:text-stone-400">
-                          {formatPrice(
-                            linePrice.amount,
-                            linePrice.currencyCode
-                          )}{" "}
-                          per stuk
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Loading Overlay */}
-                    {(isUpdating || isRemoving) && (
-                      <div className="absolute inset-0 bg-white/80 dark:bg-stone-800/80 rounded-2xl flex items-center justify-center">
-                        <div className="flex items-center gap-2 text-blue-600">
-                          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                          <span className="text-sm font-medium">
-                            {isRemoving ? "Verwijderen..." : "Bijwerken..."}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
             </div>
 
             {/* Premium Cart Summary */}
@@ -447,27 +495,63 @@ export default function PremiumCartDrawer() {
               {/* Order Summary */}
               <div className="space-y-2">
                 <div className="flex justify-between text-stone-600 dark:text-stone-400 text-sm">
-                  <span>Subtotaal ({totals.items} items)</span>
-                  <span>
-                    {formatPrice(
-                      totals.subtotal.toString(),
-                      totals.currencyCode
-                    )}
-                  </span>
+                  <span>Subtotaal ({shippingInfo.totalItems} items)</span>
+                  <span>{formatPrice(shippingInfo.totalSubtotal)}</span>
                 </div>
 
-                <div className="flex justify-between text-stone-600 dark:text-stone-400 text-sm">
-                  <span>Verzending</span>
-                  <span
-                    className={
-                      hasFreeShipping ? "text-green-600 font-medium" : ""
-                    }
-                  >
-                    {hasFreeShipping
-                      ? "GRATIS! 🎉"
-                      : `€${shippingCost.toFixed(2)}`}
-                  </span>
-                </div>
+                {/* Shipping Details Collapsible */}
+                <Collapsible
+                  open={showShippingDetails}
+                  onOpenChange={setShowShippingDetails}
+                >
+                  <CollapsibleTrigger asChild>
+                    <button className="flex items-center justify-between w-full text-stone-600 dark:text-stone-400 text-sm hover:text-stone-800 dark:hover:text-stone-200 transition-colors">
+                      <span>
+                        Verzending ({shippingInfo.supplierCosts.length}{" "}
+                        leveranciers)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={
+                            shippingInfo.hasFreeShipping
+                              ? "text-green-600 font-medium"
+                              : ""
+                          }
+                        >
+                          {shippingInfo.hasFreeShipping
+                            ? "GRATIS! 🎉"
+                            : formatPrice(shippingInfo.totalShipping)}
+                        </span>
+                        <Info className="w-4 h-4" />
+                      </div>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-2 mt-2">
+                    {shippingInfo.supplierCosts.map((supplierInfo) => (
+                      <div
+                        key={supplierInfo.supplier.id}
+                        className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pl-4"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{supplierInfo.supplier.icon}</span>
+                          <span>{supplierInfo.supplier.name}</span>
+                          <Badge
+                            className={`${getSupplierColor(
+                              supplierInfo.supplier.color
+                            )} text-xs px-1 py-0`}
+                          >
+                            {supplierInfo.itemCount}
+                          </Badge>
+                        </div>
+                        <span>
+                          {supplierInfo.hasFreeShipping
+                            ? "Gratis"
+                            : formatPrice(supplierInfo.shippingCost)}
+                        </span>
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
 
                 <div className="border-t border-stone-200 dark:border-stone-700 pt-2">
                   <div className="flex justify-between items-center">
@@ -475,7 +559,7 @@ export default function PremiumCartDrawer() {
                       Totaal
                     </span>
                     <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                      {formatPrice(finalTotal.toString(), totals.currencyCode)}
+                      {formatPrice(finalTotal)}
                     </span>
                   </div>
                 </div>
@@ -492,7 +576,7 @@ export default function PremiumCartDrawer() {
                 <div className="text-center">
                   <Clock className="w-4 h-4 text-blue-500 mx-auto mb-1" />
                   <div className="text-xs text-stone-600 dark:text-stone-400">
-                    2-3 werkdagen
+                    Snelle levering
                   </div>
                 </div>
                 <div className="text-center">

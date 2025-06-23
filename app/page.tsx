@@ -153,7 +153,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Categories Section - GEFIXTE IMAGE PATHS */}
+        {/* Categories Section */}
         <section className="section-padding bg-white dark:bg-stone-900">
           <div className="container">
             <div className="text-center mb-16 animate-fade-in-up">
@@ -175,8 +175,8 @@ export default async function HomePage() {
                   title: "Strandhanddoeken",
                   description:
                     "Luxe, zachte handdoeken perfect voor strand en zwembad",
-                  image: "/strandhandoek.png",
-                  link: "/zomer-collectie",
+                  image: "/luxury-beach-towels-summer.png",
+                  link: "/shop?category=strandhanddoeken",
                   color: "from-blue-500 to-cyan-500",
                 },
                 {
@@ -184,15 +184,15 @@ export default async function HomePage() {
                   title: "Strand Accessoires",
                   description:
                     "Alles wat je nodig hebt voor de perfecte stranddag",
-                  image: "/strandspul.png",
-                  link: "/zomer-collectie",
+                  image: "/beach-accessories-summer.png",
+                  link: "/shop?category=strand-accessoires",
                   color: "from-orange-500 to-yellow-500",
                 },
                 {
                   icon: Gift,
                   title: "Lifestyle & Cadeaus",
                   description: "Unieke lifestyle producten en perfecte cadeaus",
-                  image: "/hangmat.png",
+                  image: "/summer-hammock-gifts.png",
                   link: "/cadeaus",
                   color: "from-green-500 to-emerald-500",
                 },
@@ -379,9 +379,8 @@ export default async function HomePage() {
               <ul className="space-y-3 text-stone-300">
                 {[
                   { name: "Home", href: "/" },
-                  { name: "Zomer Collectie", href: "/zomer-collectie" },
+                  { name: "Shop", href: "/shop" },
                   { name: "Cadeaus", href: "/cadeaus" },
-                  { name: "Over Ons", href: "/over-ons" },
                   { name: "Contact", href: "/contact" },
                 ].map((link) => (
                   <li key={link.name}>
@@ -396,16 +395,20 @@ export default async function HomePage() {
               </ul>
             </div>
 
-            {/* Service */}
+            {/* Service & Legal */}
             <div>
-              <h3 className="font-semibold mb-6 text-lg">Service</h3>
+              <h3 className="font-semibold mb-6 text-lg">
+                Service & Juridisch
+              </h3>
               <ul className="space-y-3 text-stone-300">
                 {[
-                  { name: "Verzending", href: "/verzending" },
-                  { name: "Retourneren", href: "/retourneren" },
+                  {
+                    name: "Algemene Voorwaarden",
+                    href: "/algemene-voorwaarden",
+                  },
+                  { name: "Privacy Policy", href: "/privacy-policy" },
+                  { name: "Cookie Policy", href: "/cookie-policy" },
                   { name: "FAQ", href: "/faq" },
-                  { name: "Privacy", href: "/privacy" },
-                  { name: "Algemene Voorwaarden", href: "/voorwaarden" },
                 ].map((link) => (
                   <li key={link.name}>
                     <Link
@@ -422,7 +425,7 @@ export default async function HomePage() {
 
           <div className="border-t border-stone-800 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-stone-400 text-sm mb-4 md:mb-0">
-              &copy; 2024 Cocúfum. Alle rechten voorbehouden.
+              &copy; 2025 Cocúfum. Alle rechten voorbehouden.
             </p>
             <div className="flex items-center space-x-6 text-sm text-stone-400">
               <span>Contact: info@cocufum.com</span>

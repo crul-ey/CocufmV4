@@ -41,33 +41,78 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const initializeCart = async () => {
-    let cartId = localStorage.getItem("shopify-cart-id");
+    try {
+      let cartId = localStorage.getItem("shopify-cart-id");
 
-    if (cartId) {
-      const existingCart = await getCart(cartId);
-      if (existingCart) {
-        setCart(existingCart);
-        return;
+      if (cartId) {
+        const existingCart = await getCart(cartId);
+        if (existingCart) {
+          setCart(existingCart);
+          return existingCart;
+        }
       }
-    }
 
-    // Create new cart if none exists or existing cart is invalid
-    cartId = await createCart();
-    localStorage.setItem("shopify-cart-id", cartId);
-    const newCart = await getCart(cartId);
-    setCart(newCart);
+      // Create new cart if none exists or existing cart is invalid
+      cartId = await createCart();
+      localStorage.setItem("shopify-cart-id", cartId);
+      const newCart = await getCart(cartId);
+      setCart(newCart);
+      return newCart;
+    } catch (error) {
+      console.error("❌ Error initializing cart:", error);
+      return null;
+    }
   };
 
   const addItem = async (variantId: string, quantity = 1) => {
-    if (!cart) return;
-
     setIsLoading(true);
+
     try {
-      const updatedCart = await shopifyAddToCart(cart.id, variantId, quantity);
+      let currentCart = cart;
+
+      // If no cart, initialize one first
+      if (!currentCart) {
+        console.log("🔄 No cart found, initializing...");
+        currentCart = await initializeCart();
+        if (!currentCart) {
+          throw new Error("Failed to initialize cart");
+        }
+      }
+
+      console.log("🛒 Adding to cart:", {
+        variantId,
+        quantity,
+        cartId: currentCart.id,
+      });
+      const updatedCart = await shopifyAddToCart(
+        currentCart.id,
+        variantId,
+        quantity
+      );
       setCart(updatedCart);
       setIsOpen(true);
+      console.log("✅ Successfully added to cart!");
     } catch (error) {
-      console.error("Error adding to cart:", error);
+      console.error("❌ Error adding to cart:", error);
+
+      // Try to reinitialize cart and retry once
+      try {
+        console.log("🔄 Retrying with new cart...");
+        const newCart = await initializeCart();
+        if (newCart) {
+          const updatedCart = await shopifyAddToCart(
+            newCart.id,
+            variantId,
+            quantity
+          );
+          setCart(updatedCart);
+          setIsOpen(true);
+          console.log("✅ Successfully added to cart on retry!");
+        }
+      } catch (retryError) {
+        console.error("❌ Retry also failed:", retryError);
+        throw retryError;
+      }
     } finally {
       setIsLoading(false);
     }

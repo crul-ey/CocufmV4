@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import ScrollToTop from "@/components/scroll-to-top";
 import StructuredData from "@/components/seo/structured-data";
+import CookieBanner from "@/components/cookie-banner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -143,6 +144,7 @@ export default function RootLayout({
           <CartProvider>
             <WishlistProvider>
               {children}
+              <CookieBanner />
               <ScrollToTop />
               <Toaster />
             </WishlistProvider>
