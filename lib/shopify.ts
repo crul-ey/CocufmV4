@@ -1,3 +1,4 @@
+// lib/shopify.ts
 // Shopify Storefront helpers
 // All calls run on the SERVER so your credentials stay safe
 
@@ -8,72 +9,77 @@ const SHOPIFY_DOMAIN = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN;
 const SHOPIFY_TOKEN = process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN;
 
 if (!SHOPIFY_DOMAIN || !SHOPIFY_TOKEN) {
-  throw new Error(
+  // Gebruik console.error en een duidelijkere, actievere foutmelding
+  console.error(
     "⚠️ Missing Shopify env vars. Add NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN and NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN."
+  );
+  throw new Error(
+    "Configuration Error: Missing Shopify environment variables. Please check your .env file."
   );
 }
 
 /* -------------------------------------------------------------------- */
 /* 2. TYPES                                                            */
 /* -------------------------------------------------------------------- */
+// Gebruik 'readonly' voor immuutbare eigenschappen waar van toepassing
 export interface ShopifyVariant {
-  id: string;
-  title: string;
-  price: { amount: string; currencyCode: string };
-  availableForSale: boolean;
-  quantityAvailable?: number;
+  readonly id: string;
+  readonly title: string;
+  readonly price: { amount: string; currencyCode: string };
+  readonly availableForSale: boolean;
+  readonly quantityAvailable?: number;
 }
 
 export interface ShopifyProduct {
-  id: string;
-  title: string;
-  description: string;
-  descriptionHtml: string;
-  handle: string;
-  vendor?: string;
-  images: {
-    edges: Array<{ node: { url: string; altText: string | null } }>;
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly descriptionHtml: string;
+  readonly handle: string;
+  readonly vendor?: string;
+  readonly images: {
+    readonly edges: ReadonlyArray<{ readonly node: { url: string; altText: string | null } }>;
   };
-  priceRange: {
-    minVariantPrice: {
+  readonly priceRange: {
+    readonly minVariantPrice: {
       amount: string;
       currencyCode: string;
     };
   };
-  variants: {
-    edges: Array<{
-      node: ShopifyVariant;
+  readonly variants: {
+    readonly edges: ReadonlyArray<{
+      readonly node: ShopifyVariant;
     }>;
   };
-  tags: string[];
+  readonly tags: ReadonlyArray<string>; // Gebruik ReadonlyArray
 }
 
 export interface ShopifyCart {
-  id: string;
-  lines: {
-    edges: Array<{
-      node: {
-        id: string;
-        quantity: number;
-        merchandise: {
-          id: string;
-          title: string;
-          product: {
-            title: string;
-            handle: string;
-            vendor?: string;
-            images: {
-              edges: Array<{ node: { url: string; altText: string | null } }>;
+  readonly id: string;
+  readonly lines: {
+    readonly edges: ReadonlyArray<{
+      readonly node: {
+        readonly id: string;
+        readonly quantity: number;
+        readonly merchandise: {
+          readonly id: string;
+          readonly title: string;
+          readonly product: {
+            readonly title: string;
+            readonly handle: string;
+            readonly vendor?: string;
+            readonly images: {
+              readonly edges: ReadonlyArray<{ readonly node: { url: string; altText: string | null } }>;
             };
-            tags: string[];
+            readonly tags: ReadonlyArray<string>;
           };
-          price: { amount: string; currencyCode: string };
+          readonly price: { amount: string; currencyCode: string };
         };
       };
     }>;
   };
-  cost: { totalAmount: { amount: string; currencyCode: string } };
-  checkoutUrl: string;
+  readonly cost: { readonly totalAmount: { amount: string; currencyCode: string } };
+  readonly checkoutUrl: string;
 }
 
 /* -------------------------------------------------------------------- */
@@ -83,22 +89,33 @@ const SHOPIFY_ENDPOINT = `https://${SHOPIFY_DOMAIN}/api/2023-10/graphql.json`;
 
 async function shopifyFetch<T>(
   query: string,
-  variables?: Record<string, unknown>
+  variables?: Record<string, unknown>,
+  cacheRevalidate?: number // Optionele cache revalidatie tijd
 ): Promise<T> {
-  const res = await fetch(SHOPIFY_ENDPOINT, {
+  const options: RequestInit = {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Shopify-Storefront-Access-Token": SHOPIFY_TOKEN!,
+      "X-Shopify-Storefront-Access-Token": SHOPIFY_TOKEN!, // Non-null assertion is hier veilig door de initiële check
     },
     body: JSON.stringify({ query, variables }),
-    cache: "no-store",
-  });
+  };
+
+  // Cache beleid toevoegen
+  if (cacheRevalidate !== undefined) {
+    options.next = { revalidate: cacheRevalidate };
+  } else {
+    options.cache = "no-store"; // Standaard: geen cache voor mutaties/real-time data
+  }
+
+  const res = await fetch(SHOPIFY_ENDPOINT, options);
 
   if (!res.ok) {
     const errorBody = await res.text();
-    console.error("Shopify API Error Response:", errorBody);
-    throw new Error(`Shopify error ${res.status}: ${errorBody}`);
+    const errorMessage = `Shopify API Error ${res.status} (${res.statusText}): ${errorBody}`;
+    console.error("Shopify API Error Response:", errorMessage);
+    // Gooi een meer specifieke fout die kan worden onderschept
+    throw new Error(`ShopifyFetchError: ${errorMessage}`);
   }
 
   const { data, errors } = (await res.json()) as {
@@ -107,7 +124,8 @@ async function shopifyFetch<T>(
   };
 
   if (errors?.length) {
-    console.error("Shopify GraphQL Errors:", JSON.stringify(errors, null, 2));
+    const formattedErrors = JSON.stringify(errors, null, 2);
+    console.error("Shopify GraphQL Errors:", formattedErrors);
     const errorMessages = errors
       .map((err) => {
         let msg = err.message;
@@ -117,7 +135,8 @@ async function shopifyFetch<T>(
         return msg;
       })
       .join("; ");
-    throw new Error(errorMessages);
+    // Gooi een meer specifieke fout die kan worden onderschept
+    throw new Error(`ShopifyGraphQLError: ${errorMessages}`);
   }
   return data;
 }
@@ -163,9 +182,10 @@ export async function getProducts(first = 100): Promise<ShopifyProduct[]> {
     }
     ${ProductFragment}
   `;
+  // Gebruik cache revalidatie voor productqueries
   const data = await shopifyFetch<{
     products: { edges: Array<{ node: ShopifyProduct }> };
-  }>(query, { first });
+  }>(query, { first }, 3600); // Revalidate elke uur
   return data.products.edges.map((e) => e.node);
 }
 
@@ -180,9 +200,10 @@ export async function getProduct(
     }
     ${ProductFragment}
   `;
+  // Gebruik cache revalidatie voor individuele producten
   const data = await shopifyFetch<{ product: ShopifyProduct | null }>(query, {
     handle,
-  });
+  }, 3600); // Revalidate elke uur
   return data.product;
 }
 
@@ -203,12 +224,13 @@ export async function searchProducts(
     ${ProductFragment}
   `;
   const formattedQuery = `title:*${queryText}* OR tag:*${queryText}* OR product_type:*${queryText}*`;
+  // Gebruik cache revalidatie voor zoekopdrachten
   const data = await shopifyFetch<{
     products: { edges: Array<{ node: ShopifyProduct }> };
   }>(searchQuery, {
     query: formattedQuery,
     first,
-  });
+  }, 300); // Revalidate elke 5 minuten
   return data.products.edges.map((e) => e.node);
 }
 
@@ -255,14 +277,14 @@ export async function createCart(): Promise<string> {
       }
     }
   `;
+  // Geen cache voor mutaties
   const data = await shopifyFetch<{
     cartCreate: { cart: { id: string }; userErrors: any[] };
   }>(query);
   if (data.cartCreate.userErrors?.length) {
+    const userErrorMessages = data.cartCreate.userErrors.map((e) => e.message).join(", ");
     console.error("❌ Shopify cartCreate UserErrors:", data.cartCreate.userErrors);
-    throw new Error(
-      data.cartCreate.userErrors.map((e) => e.message).join(", ")
-    );
+    throw new Error(`CartCreationError: ${userErrorMessages}`);
   }
   console.log("✅ New Shopify cart created:", data.cartCreate.cart.id);
   return data.cartCreate.cart.id;
@@ -277,15 +299,15 @@ export async function addToCart(
 
   // ➕ Sanity checks
   if (!variantId || !variantId.startsWith("gid://shopify/ProductVariant/")) {
-    const msg = `❌ Ongeldig variantId meegegeven: ${variantId}`;
+    const msg = `❌ Invalid variantId provided: ${variantId}. Expected 'gid://shopify/ProductVariant/...'`;
     console.error(msg);
-    throw new Error(msg);
+    throw new Error(`InputValidationError: ${msg}`);
   }
 
   if (!cartId || !cartId.startsWith("gid://shopify/Cart/")) {
-    const msg = `❌ Ongeldig cartId meegegeven: ${cartId}`;
+    const msg = `❌ Invalid cartId provided: ${cartId}. Expected 'gid://shopify/Cart/...'`;
     console.error(msg);
-    throw new Error(msg);
+    throw new Error(`InputValidationError: ${msg}`);
   }
 
   const query = /* GraphQL */ `
@@ -308,28 +330,22 @@ export async function addToCart(
     ],
   };
 
-  // Deze console.log hoort vóór de aanroep van `shopifyFetch` als je de `selectedVariant.id` wilt loggen voordat deze wordt gebruikt.
-  // Echter, gezien de context "Zet boven je await addItem(...):", en deze functie is `addToCart`,
-  // neem ik aan dat `addItem` een aanroep is die deze `addToCart` functie gebruikt.
-  // Dus, als je de log specifiek voor een `addItem` aanroep elders bedoelt, moet die log daar staan.
-  // Voor nu voeg ik de log hier toe, in de `addToCart` functie, als illustratie van waar een dergelijke log zou kunnen staan.
-  // De `selectedVariant.id` variabele is hier echter niet direct beschikbaar, deze zou van buiten de functie moeten komen.
-  // Als `selectedVariant.id` de `variantId` is die hier wordt doorgegeven, dan is dit de juiste plek.
-  console.log("🧪 variantId (selectedVariant.id):", variantId); // Aangenomen dat variantId de selectedVariant.id is
+  // Deze log is voor debuggen van de ID die daadwerkelijk wordt doorgegeven aan Shopify
+  console.log("🧪 variantId sent to Shopify:", variantId);
 
+  // Geen cache voor mutaties
   const data = await shopifyFetch<{
     cartLinesAdd: { cart: ShopifyCart; userErrors: any[] };
   }>(query, variables);
 
   if (data.cartLinesAdd.userErrors?.length) {
-    console.error("❌ Shopify cartLinesAdd UserErrors:", data.cartLinesAdd.userErrors);
     const errorMessages = data.cartLinesAdd.userErrors
       .map((e) => `${e.code || "unknown"}: ${e.message} (Field: ${e.field})`)
       .join("; ");
-    throw new Error(errorMessages);
+    console.error("❌ Shopify cartLinesAdd UserErrors:", data.cartLinesAdd.userErrors);
+    throw new Error(`AddToCartError: ${errorMessages}`); // Specifieke foutnaam
   }
-
-  console.log("✅ Shopify addToCart success:", data.cartLinesAdd.cart.id);
+  console.log("✅ Shopify addToCart success for cart:", data.cartLinesAdd.cart.id);
   return data.cartLinesAdd.cart;
 }
 
@@ -344,6 +360,7 @@ export async function getCart(cartId: string): Promise<ShopifyCart | null> {
     ${CartFieldsFragment}
   `;
   try {
+    // Geen cache voor de huidige winkelwagen status
     const data = await shopifyFetch<{ cart: ShopifyCart | null }>(query, {
       cartId,
     });
@@ -354,8 +371,9 @@ export async function getCart(cartId: string): Promise<ShopifyCart | null> {
     }
     return data.cart;
   } catch (error) {
-    console.error("❌ Error fetching Shopify cart:", cartId, error);
-    return null;
+    // Log de fout, maar laat de functie null retourneren of de error doorgooien als je strikter wilt zijn
+    console.error(`❌ Error fetching Shopify cart ${cartId}:`, error instanceof Error ? error.message : String(error));
+    return null; // Retourneer null bij fout, laat de caller beslissen om opnieuw te initialiseren
   }
 }
 
@@ -374,14 +392,14 @@ export async function removeFromCart(
     ${CartFieldsFragment}
   `;
   const variables = { cartId, lineIds: [lineId] };
+  // Geen cache voor mutaties
   const data = await shopifyFetch<{
     cartLinesRemove: { cart: ShopifyCart; userErrors: any[] };
   }>(query, variables);
   if (data.cartLinesRemove.userErrors?.length) {
+    const userErrorMessages = data.cartLinesRemove.userErrors.map((e) => e.message).join(", ");
     console.error("❌ Shopify cartLinesRemove UserErrors:", data.cartLinesRemove.userErrors);
-    throw new Error(
-      data.cartLinesRemove.userErrors.map((e) => e.message).join(", ")
-    );
+    throw new Error(`RemoveFromCartError: ${userErrorMessages}`);
   }
   console.log("✅ Shopify removeFromCart success for cart:", cartId);
   return data.cartLinesRemove.cart;
@@ -403,14 +421,14 @@ export async function updateCartLine(
     ${CartFieldsFragment}
   `;
   const variables = { cartId, lines: [{ id: lineId, quantity }] };
+  // Geen cache voor mutaties
   const data = await shopifyFetch<{
     cartLinesUpdate: { cart: ShopifyCart; userErrors: any[] };
   }>(query, variables);
   if (data.cartLinesUpdate.userErrors?.length) {
+    const userErrorMessages = data.cartLinesUpdate.userErrors.map((e) => e.message).join(", ");
     console.error("❌ Shopify cartLinesUpdate UserErrors:", data.cartLinesUpdate.userErrors);
-    throw new Error(
-      data.cartLinesUpdate.userErrors.map((e) => e.message).join(", ")
-    );
+    throw new Error(`UpdateCartLineError: ${userErrorMessages}`);
   }
   console.log("✅ Shopify updateCartLine success for cart:", cartId);
   return data.cartLinesUpdate.cart;
