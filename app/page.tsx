@@ -175,7 +175,7 @@ export default async function HomePage() {
                   title: "Strandhanddoeken",
                   description:
                     "Luxe, zachte handdoeken perfect voor strand en zwembad",
-                  image: "/luxury-beach-towels-summer.png",
+                  image: "/strandhandoek.png",
                   link: "/shop?category=strandhanddoeken",
                   color: "from-blue-500 to-cyan-500",
                 },
@@ -184,7 +184,7 @@ export default async function HomePage() {
                   title: "Strand Accessoires",
                   description:
                     "Alles wat je nodig hebt voor de perfecte stranddag",
-                  image: "/beach-accessories-summer.png",
+                  image: "/strandspul.png",
                   link: "/shop?category=strand-accessoires",
                   color: "from-orange-500 to-yellow-500",
                 },
@@ -192,7 +192,7 @@ export default async function HomePage() {
                   icon: Gift,
                   title: "Lifestyle & Cadeaus",
                   description: "Unieke lifestyle producten en perfecte cadeaus",
-                  image: "/summer-hammock-gifts.png",
+                  image: "/hangmat.png",
                   link: "/cadeaus",
                   color: "from-green-500 to-emerald-500",
                 },
@@ -429,8 +429,6 @@ export default async function HomePage() {
             </p>
             <div className="flex items-center space-x-6 text-sm text-stone-400">
               <span>Contact: info@cocufum.com</span>
-              <span>•</span>
-              <span>+31 20 123 4567</span>
             </div>
           </div>
         </div>

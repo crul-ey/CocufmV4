@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/toaster";
 import ScrollToTop from "@/components/scroll-to-top";
 import StructuredData from "@/components/seo/structured-data";
 import CookieBanner from "@/components/cookie-banner";
+import { FeedbackTrigger } from "@/components/feedback-trigger"; // <-- IMPORT
 
 const inter = Inter({
   subsets: ["latin"],
@@ -147,6 +148,7 @@ export default function RootLayout({
               <CookieBanner />
               <ScrollToTop />
               <Toaster />
+              <FeedbackTrigger /> {/* <-- HIER TOEVOEGEN */}
             </WishlistProvider>
           </CartProvider>
         </ThemeProvider>

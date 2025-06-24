@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Star, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { getProduct } from "@/lib/shopify";
+// Zorg ervoor dat ShopifyProduct type hier ook descriptionHtml bevat als je het direct gebruikt
+import { getProduct, type ShopifyProduct } from "@/lib/shopify";
 import EnhancedHeader from "@/components/header";
 import EnhancedCartDrawer from "@/components/cart-drawer";
 import AddToCart from "./add-to-cart-client";
@@ -16,8 +17,11 @@ interface ProductPageClientProps {
   handle: string;
 }
 
+// Update het type voor 'product' state om descriptionHtml te verwachten
+type ProductState = ShopifyProduct | null;
+
 export default function ProductPageClient({ handle }: ProductPageClientProps) {
-  const [product, setProduct] = useState<any>(null);
+  const [product, setProduct] = useState<ProductState>(null);
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
@@ -25,7 +29,14 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
   useEffect(() => {
     const fetchProduct = async () => {
       try {
+        console.log(`Fetching product with handle: ${handle}`);
         const fetchedProduct = await getProduct(handle);
+        console.log("Fetched product data:", fetchedProduct);
+        if (fetchedProduct && !fetchedProduct.descriptionHtml) {
+          console.warn(
+            "Product fetched, but descriptionHtml is missing. Ensure Shopify API returns it."
+          );
+        }
         setProduct(fetchedProduct);
       } catch (error) {
         console.error("Error fetching product:", error);
@@ -46,7 +57,11 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
   }
 
   if (!product) {
+    console.error(
+      `Product not found for handle: ${handle}. Rendering notFound().`
+    );
     notFound();
+    return null; // notFound() stopt de rendering, maar voor de type checker
   }
 
   const currentVariant = product.variants?.edges?.[0]?.node;
@@ -58,7 +73,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
       currency: currencyCode,
     }).format(+amount);
 
-  // Breadcrumb data for structured data
   const breadcrumbData = [
     { name: "Home", href: "/" },
     { name: "Shop", href: "/shop" },
@@ -67,16 +81,13 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
 
   return (
     <>
-      {/* SEO Structured Data */}
       <StructuredData type="product" product={product} />
       <StructuredData type="breadcrumb" data={breadcrumbData} />
 
       <EnhancedHeader />
       <EnhancedCartDrawer />
 
-      {/* 🎯 FIXED: Proper spacing to avoid navbar overlap */}
       <main className="pt-24 lg:pt-32 pb-8 lg:pb-12 min-h-screen bg-gradient-to-br from-stone-50 to-white dark:from-stone-950 dark:to-stone-900">
-        {/* Breadcrumb Navigation */}
         <div className="container">
           <nav
             className="flex items-center space-x-2 text-sm text-stone-600 dark:text-stone-400 mb-6"
@@ -106,9 +117,7 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
         </div>
 
         <div className="container grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-          {/* Interactive Image Gallery */}
           <div className="space-y-4">
-            {/* Main Image Display */}
             <div className="aspect-square relative bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 rounded-3xl overflow-hidden shadow-xl group">
               {images[selectedImageIndex] && (
                 <>
@@ -125,10 +134,7 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                     sizes="(max-width: 768px) 100vw, 50vw"
                     onClick={() => setIsImageModalOpen(true)}
                   />
-                  {/* Gradient overlay for luxury effect */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
-
-                  {/* Navigation Arrows for Main Image */}
                   {images.length > 1 && (
                     <>
                       <button
@@ -155,8 +161,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                       </button>
                     </>
                   )}
-
-                  {/* Image Counter */}
                   {images.length > 1 && (
                     <div className="absolute bottom-4 right-4 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
                       {selectedImageIndex + 1} / {images.length}
@@ -165,8 +169,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                 </>
               )}
             </div>
-
-            {/* Thumbnail Images */}
             {images.length > 1 && (
               <div className="grid grid-cols-4 gap-4">
                 {images.map((image: any, index: number) => (
@@ -197,7 +199,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
             )}
           </div>
 
-          {/* Full Screen Image Modal */}
           {isImageModalOpen && (
             <div
               className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
@@ -211,7 +212,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                 >
                   <X className="w-8 h-8" />
                 </button>
-
                 <div className="relative aspect-square max-h-[80vh]">
                   <Image
                     src={
@@ -224,8 +224,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                     className="object-contain"
                     sizes="80vw"
                   />
-
-                  {/* Modal Navigation */}
                   {images.length > 1 && (
                     <>
                       <button
@@ -255,8 +253,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                     </>
                   )}
                 </div>
-
-                {/* Modal Image Counter */}
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-4 py-2 rounded-full">
                   {selectedImageIndex + 1} / {images.length}
                 </div>
@@ -264,13 +260,11 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
             </div>
           )}
 
-          {/* Product Info */}
           <div className="space-y-8">
             <div className="space-y-4">
               <h1 className="font-serif text-3xl lg:text-5xl font-bold text-stone-900 dark:text-stone-100 leading-tight">
                 {product.title}
               </h1>
-
               <div className="flex items-center space-x-3">
                 <div
                   className="flex items-center"
@@ -292,7 +286,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                   In voorraad
                 </span>
               </div>
-
               <p className="text-4xl font-bold text-stone-900 dark:text-stone-100 font-serif">
                 {currentVariant &&
                   formatPrice(
@@ -302,13 +295,18 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
               </p>
             </div>
 
-            <div className="prose prose-stone dark:prose-invert max-w-none">
+            {/* GEWIJZIGD: Gebruik descriptionHtml met dangerouslySetInnerHTML */}
+            {product.descriptionHtml ? (
+              <div
+                className="prose prose-stone dark:prose-invert max-w-none text-stone-700 dark:text-stone-300 leading-relaxed text-lg"
+                dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
+              />
+            ) : (
               <p className="text-stone-600 dark:text-stone-300 leading-relaxed text-lg">
-                {product.description}
+                {product.description || "Geen beschrijving beschikbaar."}
               </p>
-            </div>
+            )}
 
-            {/* Product Tags */}
             {product.tags && product.tags.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {product.tags.slice(0, 5).map((tag: string) => (
@@ -322,12 +320,10 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
               </div>
             )}
 
-            {/* Add to Cart Component - Fixed sticky positioning */}
             <div className="sticky top-28 lg:top-36">
               <AddToCart product={product} />
             </div>
 
-            {/* Product Features */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-8 border-t border-stone-200 dark:border-stone-700">
               <div className="text-center p-4">
                 <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
@@ -342,7 +338,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                   Vanaf €75
                 </p>
               </div>
-
               <div className="text-center p-4">
                 <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
                   <span className="text-blue-600 dark:text-blue-400 text-xl">
@@ -356,7 +351,6 @@ export default function ProductPageClient({ handle }: ProductPageClientProps) {
                   Geld terug garantie
                 </p>
               </div>
-
               <div className="text-center p-4">
                 <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-2">
                   <span className="text-purple-600 dark:text-purple-400 text-xl">

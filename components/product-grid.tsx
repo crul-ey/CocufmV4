@@ -39,14 +39,6 @@ export default function ProductGrid({
   const [selectedCategory, setSelectedCategory] =
     useState<ProductCategory>("all");
 
-  // Get unique categories from products
-  const getProductCategory = (product: ShopifyProduct): ProductCategory => {
-    if (product.tags.includes("bigbuy-supplier")) return "sun-protection";
-    if (product.tags.includes("oils-supplier")) return "beauty-oils";
-    if (product.tags.includes("towels-supplier")) return "beach-lifestyle";
-    return "all";
-  };
-
   const handleCategoryFilter = (
     category: ProductCategory,
     filteredProducts: ShopifyProduct[]
@@ -107,9 +99,24 @@ export default function ProductGrid({
     let filtered = products;
 
     if (selectedCategory !== "all") {
-      filtered = products.filter(
-        (product) => getProductCategory(product) === selectedCategory
-      );
+      // Filter products based on selected category
+      filtered = products.filter((product) => {
+        const productTags = product.tags || [];
+        switch (selectedCategory) {
+          case "beauty-oils":
+            return productTags.includes("oils-supplier");
+          case "beach-lifestyle":
+            return productTags.includes("towels-supplier");
+          case "sun-protection":
+            return productTags.includes("bigbuy-supplier");
+          case "wine-beach":
+            return productTags.includes("wine-strand-accessories");
+          case "parfum":
+            return productTags.includes("parfum-supplier");
+          default:
+            return true;
+        }
+      });
     }
 
     const sorted = [...filtered].sort((a, b) => {
@@ -207,7 +214,7 @@ export default function ProductGrid({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="min-w-[180px] justify-between hover:bg-stone-50 dark:hover:bg-stone-800"
+                    className="min-w-[180px] justify-between hover:bg-stone-50 dark:hover:bg-stone-800 font-semibold bg-white dark:bg-stone-900 border-2"
                   >
                     {
                       sortOptions.find((option) => option.value === sortBy)
@@ -216,15 +223,18 @@ export default function ProductGrid({
                     <ChevronDown className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56 bg-white dark:bg-stone-900 border-2"
+                >
                   {sortOptions.map((option) => (
                     <DropdownMenuItem
                       key={option.value}
                       onClick={() => setSortBy(option.value)}
-                      className={`cursor-pointer ${
+                      className={`cursor-pointer font-medium ${
                         sortBy === option.value
-                          ? "bg-stone-100 dark:bg-stone-800"
-                          : ""
+                          ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                          : "text-stone-700 dark:text-stone-300"
                       }`}
                     >
                       <option.icon className="w-4 h-4 mr-2" />
@@ -239,13 +249,13 @@ export default function ProductGrid({
       )}
 
       {/* Products Count */}
-      <div className="flex items-center justify-between text-sm text-stone-600 dark:text-stone-400">
-        <span>
+      <div className="flex items-center justify-between text-sm font-semibold">
+        <span className="text-stone-700 dark:text-stone-300">
           {sortedProducts.length} product
           {sortedProducts.length !== 1 ? "en" : ""} gevonden
           {selectedCategory !== "all" && ` in geselecteerde categorie`}
         </span>
-        <span className="hidden sm:block">
+        <span className="hidden sm:block text-stone-600 dark:text-stone-400">
           Gesorteerd op:{" "}
           {sortOptions.find((option) => option.value === sortBy)?.label}
         </span>

@@ -4,8 +4,9 @@ interface Product {
   id: string;
   title: string;
   description: string;
+  descriptionHtml?: string; // TOEGEVOEGD voor consistentie, kan ook description zijn
   handle: string;
-  images: { edges: Array<{ node: { url: string; altText?: string } }> };
+  images: { edges: Array<{ node: { url: string; altText?: string | null } }> }; // AANGEPASTE REGEL: altText accepteert nu ook null
   variants: {
     edges: Array<{ node: { price: { amount: string; currencyCode: string } } }>;
   };
@@ -94,7 +95,7 @@ export default function StructuredData({
           "@context": "https://schema.org",
           "@type": "Product",
           name: product.title,
-          description: product.description,
+          description: product.descriptionHtml || product.description, // Gebruik HTML indien beschikbaar
           image: mainImage?.url ? [mainImage.url] : [],
           url: `${baseUrl}/product/${product.handle}`,
           sku: product.id,

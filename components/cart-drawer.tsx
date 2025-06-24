@@ -39,14 +39,9 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-type Price = {
-  amount: string;
-  currencyCode: string;
-};
-
 type CartState = "idle" | "updating" | "success" | "error";
 
-export default function PremiumCartDrawer() {
+export default function EnhancedCartDrawer() {
   const { cart, isOpen, closeCart, removeItem, updateQuantity, isLoading } =
     useCart();
   const { toast } = useToast();
@@ -58,7 +53,6 @@ export default function PremiumCartDrawer() {
 
   const handleQuantityUpdate = async (lineId: string, newQuantity: number) => {
     if (newQuantity < 1) {
-      // Direct remove when quantity becomes 0
       handleRemoveItem(lineId, "Product");
       return;
     }
@@ -101,15 +95,12 @@ export default function PremiumCartDrawer() {
   };
 
   const handleRemoveItem = async (lineId: string, productTitle: string) => {
-    // Use native browser confirm for mobile reliability
     const confirmed = window.confirm(
       `${productTitle} uit winkelwagen verwijderen?`
     );
-
     if (!confirmed) return;
 
     setRemovingItems((prev) => new Set(prev).add(lineId));
-
     try {
       await removeItem(lineId);
       toast({
@@ -135,16 +126,14 @@ export default function PremiumCartDrawer() {
   };
 
   const cartItems = cart?.lines.edges || [];
-
-  // 🚚 NIEUWE SHIPPING CALCULATION
   const shippingInfo = shippingCalculator.calculateShippingCosts(cartItems);
   const finalTotal = shippingInfo.totalSubtotal + shippingInfo.totalShipping;
 
   return (
     <Sheet open={isOpen} onOpenChange={closeCart}>
-      <SheetContent className="w-full sm:max-w-xl bg-gradient-to-br from-white via-stone-50 to-stone-100 dark:from-stone-900 dark:via-stone-800 dark:to-stone-700 flex flex-col">
-        {/* Premium Header */}
-        <SheetHeader className="border-b border-stone-200 dark:border-stone-700 pb-4 relative overflow-hidden flex-shrink-0">
+      <SheetContent className="w-full sm:max-w-xl bg-gradient-to-br from-white via-stone-50 to-stone-100 dark:from-stone-900 dark:via-stone-800 dark:to-stone-700 flex flex-col p-0 sm:p-0">
+        {/* Header */}
+        <SheetHeader className="border-b border-stone-200 dark:border-stone-700 pb-4 relative overflow-hidden flex-shrink-0 px-4 sm:px-6 pt-4 sm:pt-6">
           {celebrationMode && (
             <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 via-blue-400/20 to-purple-400/20 animate-pulse" />
           )}
@@ -160,8 +149,9 @@ export default function PremiumCartDrawer() {
                   )}
                 </div>
                 <div>
+                  {/* REMOVED "Premium" */}
                   <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">
-                    Premium Winkelwagen
+                    Winkelwagen
                   </h2>
                   <p className="text-sm text-stone-600 dark:text-stone-400">
                     {cartItems.length}{" "}
@@ -169,13 +159,14 @@ export default function PremiumCartDrawer() {
                   </p>
                 </div>
               </div>
-              <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" />
+              {/* Optional: Remove Sparkles if "Premium" feel is completely gone */}
+              {/* <Sparkles className="w-5 h-5 text-yellow-500 animate-pulse" /> */}
             </SheetTitle>
 
-            {/* 🚚 MULTI-SUPPLIER SHIPPING PROGRESS */}
+            {/* Shipping Progress - visible on all screens, but simplified */}
             {cartItems.length > 0 && (
               <div className="mt-4 space-y-3">
-                {shippingInfo.supplierCosts.map((supplierInfo, index) => (
+                {shippingInfo.supplierCosts.map((supplierInfo) => (
                   <div
                     key={supplierInfo.supplier.id}
                     className={`p-3 rounded-xl border ${
@@ -184,7 +175,7 @@ export default function PremiumCartDrawer() {
                         : "bg-gradient-to-r from-blue-50 to-orange-50 dark:from-blue-900/20 dark:to-orange-900/20 border-blue-200 dark:border-blue-700"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1 sm:mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">
                           {supplierInfo.supplier.icon}
@@ -193,9 +184,9 @@ export default function PremiumCartDrawer() {
                           {supplierInfo.supplier.name}
                         </span>
                         <Badge
-                          className={getSupplierColor(
+                          className={`${getSupplierColor(
                             supplierInfo.supplier.color
-                          )}
+                          )} text-xs px-1.5 py-0.5`}
                         >
                           {supplierInfo.itemCount} items
                         </Badge>
@@ -214,7 +205,7 @@ export default function PremiumCartDrawer() {
                         <div className="flex items-center justify-between text-xs text-stone-600 dark:text-stone-400">
                           <span>
                             Nog {formatPrice(supplierInfo.amountToFreeShipping)}{" "}
-                            voor gratis verzending
+                            voor gratis
                           </span>
                           <span>
                             {Math.round(
@@ -240,7 +231,6 @@ export default function PremiumCartDrawer() {
                   </div>
                 ))}
 
-                {/* Total Shipping Summary */}
                 <div className="p-3 bg-gradient-to-r from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-700 rounded-xl border border-stone-300 dark:border-stone-600">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -264,7 +254,6 @@ export default function PremiumCartDrawer() {
         </SheetHeader>
 
         {cartItems.length === 0 ? (
-          /* Empty Cart State */
           <div className="flex-1 flex flex-col items-center justify-center text-center py-12 px-6">
             <div className="relative mb-6">
               <div className="w-24 h-24 bg-gradient-to-br from-stone-200 to-stone-300 dark:from-stone-700 dark:to-stone-600 rounded-full flex items-center justify-center animate-float">
@@ -274,15 +263,13 @@ export default function PremiumCartDrawer() {
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
             </div>
-
             <h3 className="text-2xl font-bold text-stone-900 dark:text-stone-100 mb-3">
               Je winkelwagen wacht op jou! ✨
             </h3>
             <p className="text-stone-600 dark:text-stone-400 mb-8 max-w-sm leading-relaxed">
-              Ontdek onze premium collectie van zorgvuldig geselecteerde
-              lifestyle producten.
+              Ontdek onze collectie van zorgvuldig geselecteerde lifestyle
+              producten.
             </p>
-
             <Button
               onClick={closeCart}
               className="w-full max-w-xs btn-summer text-lg py-4 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
@@ -290,30 +277,34 @@ export default function PremiumCartDrawer() {
               <Sparkles className="w-5 h-5 mr-2" />
               Ontdek Collectie
             </Button>
-
             <div className="flex items-center justify-center gap-6 text-xs text-stone-500 dark:text-stone-400 pt-6">
               <div className="flex items-center gap-1">
-                <Shield className="w-3 h-3" />
-                <span>Veilig</span>
+                {" "}
+                <Shield className="w-3 h-3" /> <span>Veilig</span>{" "}
               </div>
               <div className="flex items-center gap-1">
-                <Truck className="w-3 h-3" />
-                <span>Gratis verzending</span>
+                {" "}
+                <Truck className="w-3 h-3" /> <span>Gratis verzending</span>{" "}
               </div>
               <div className="flex items-center gap-1">
-                <Heart className="w-3 h-3" />
-                <span>Premium kwaliteit</span>
+                {" "}
+                <Heart className="w-3 h-3" /> <span>Kwaliteit</span>{" "}
               </div>
             </div>
           </div>
         ) : (
           <>
-            {/* Cart Items - GROUPED BY SUPPLIER */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4 px-1">
-              {shippingInfo.supplierCosts.map((supplierInfo, supplierIndex) => (
-                <div key={supplierInfo.supplier.id} className="space-y-3">
-                  {/* Supplier Header */}
-                  <div className="flex items-center gap-2 px-2">
+            <div className="flex-1 overflow-y-auto py-4 space-y-3 sm:space-y-4 px-2 sm:px-4">
+              {" "}
+              {/* Reduced padding on mobile */}
+              {/* Items - Supplier grouping header is hidden on mobile */}
+              {shippingInfo.supplierCosts.map((supplierInfo) => (
+                <div
+                  key={supplierInfo.supplier.id}
+                  className="space-y-2 sm:space-y-3"
+                >
+                  {/* Supplier Header - HIDDEN ON MOBILE, SHOWN ON SM+ */}
+                  <div className="hidden sm:flex items-center gap-2 px-2">
                     <span className="text-lg">
                       {supplierInfo.supplier.icon}
                     </span>
@@ -321,7 +312,9 @@ export default function PremiumCartDrawer() {
                       {supplierInfo.supplier.name}
                     </span>
                     <Badge
-                      className={getSupplierColor(supplierInfo.supplier.color)}
+                      className={`${getSupplierColor(
+                        supplierInfo.supplier.color
+                      )} text-xs px-1.5 py-0.5`}
                     >
                       {supplierInfo.itemCount} items
                     </Badge>
@@ -331,8 +324,7 @@ export default function PremiumCartDrawer() {
                     </span>
                   </div>
 
-                  {/* Supplier Items */}
-                  {supplierInfo.items.map(({ node: item }, index) => {
+                  {supplierInfo.items.map(({ node: item }) => {
                     const isUpdating = updatingItems.has(item.id);
                     const isRemoving = removingItems.has(item.id);
                     const linePrice = item.merchandise?.price;
@@ -345,7 +337,8 @@ export default function PremiumCartDrawer() {
                     return (
                       <div
                         key={item.id}
-                        className={`p-4 bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm transition-all duration-300 ${
+                        className={`p-3 sm:p-4 bg-white dark:bg-stone-800 rounded-xl sm:rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm transition-all duration-300 ${
+                          /* Adjusted padding and rounding for mobile */
                           isUpdating
                             ? "ring-2 ring-blue-400 bg-blue-50 dark:bg-blue-900/20"
                             : ""
@@ -355,11 +348,11 @@ export default function PremiumCartDrawer() {
                             : ""
                         } ${isRemoving ? "opacity-50 scale-95" : ""}`}
                       >
-                        {/* Product Header with Remove Button */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex gap-3 flex-1 min-w-0">
-                            {/* Product Image */}
-                            <div className="relative w-16 h-16 bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-700 dark:to-stone-600 rounded-xl overflow-hidden flex-shrink-0">
+                        <div className="flex items-start justify-between mb-2 sm:mb-3">
+                          <div className="flex gap-2 sm:gap-3 flex-1 min-w-0">
+                            <div className="relative w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-700 dark:to-stone-600 rounded-lg sm:rounded-xl overflow-hidden flex-shrink-0">
+                              {" "}
+                              {/* Adjusted size/rounding */}
                               {item.merchandise.product.images.edges[0] ? (
                                 <Image
                                   src={
@@ -369,6 +362,7 @@ export default function PremiumCartDrawer() {
                                   alt={item.merchandise.product.title}
                                   fill
                                   className="object-cover"
+                                  sizes="(max-width: 640px) 56px, 64px"
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
@@ -376,18 +370,18 @@ export default function PremiumCartDrawer() {
                                 </div>
                               )}
                             </div>
-
-                            {/* Product Info */}
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-bold text-stone-900 dark:text-stone-100 text-sm leading-tight mb-1">
+                              <h4 className="font-semibold sm:font-bold text-stone-900 dark:text-stone-100 text-sm leading-tight mb-0.5 sm:mb-1 truncate">
+                                {" "}
+                                {/* Adjusted font weight */}
                                 {item.merchandise.product.title}
                               </h4>
                               {item.merchandise.title !== "Default Title" && (
-                                <p className="text-xs text-stone-600 dark:text-stone-400">
+                                <p className="text-xs text-stone-600 dark:text-stone-400 truncate">
                                   {item.merchandise.title}
                                 </p>
                               )}
-                              <div className="font-bold text-stone-900 dark:text-stone-100 text-sm mt-1">
+                              <div className="font-semibold sm:font-bold text-stone-900 dark:text-stone-100 text-sm mt-1">
                                 {linePrice
                                   ? formatPrice(
                                       Number.parseFloat(lineTotalAmount)
@@ -396,8 +390,6 @@ export default function PremiumCartDrawer() {
                               </div>
                             </div>
                           </div>
-
-                          {/* SIMPLE REMOVE BUTTON */}
                           <button
                             onClick={() =>
                               handleRemoveItem(
@@ -406,20 +398,20 @@ export default function PremiumCartDrawer() {
                               )
                             }
                             disabled={isLoading || isRemoving}
-                            className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/20 text-red-600 hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center flex-shrink-0 ml-2"
+                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-red-100 dark:bg-red-900/20 text-red-600 hover:bg-red-200 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center flex-shrink-0 ml-2 p-0" // Adjusted size
                             style={{
-                              minWidth: "44px",
-                              minHeight: "44px",
+                              minWidth: "36px",
+                              minHeight: "36px",
                               WebkitTapHighlightColor: "transparent",
-                            }}
+                            }} // Adjusted min size
                           >
                             <X className="w-4 h-4" />
                           </button>
                         </div>
-
-                        {/* Quantity Controls */}
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center bg-stone-100 dark:bg-stone-700 rounded-full p-1">
+                          <div className="flex items-center bg-stone-100 dark:bg-stone-700 rounded-full p-0.5 sm:p-1">
+                            {" "}
+                            {/* Adjusted padding */}
                             <button
                               onClick={() =>
                                 handleQuantityUpdate(item.id, item.quantity - 1)
@@ -427,54 +419,48 @@ export default function PremiumCartDrawer() {
                               disabled={
                                 isUpdating || isLoading || item.quantity <= 1
                               }
-                              className="w-10 h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center"
+                              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center" // Adjusted size
                               style={{
-                                minWidth: "44px",
-                                minHeight: "44px",
+                                minWidth: "36px",
+                                minHeight: "36px",
                                 WebkitTapHighlightColor: "transparent",
-                              }}
+                              }} // Adjusted min size
                             >
                               <Minus className="w-4 h-4" />
                             </button>
-
-                            <div className="w-12 text-center">
+                            <div className="w-10 sm:w-12 text-center">
                               {isUpdating ? (
                                 <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
                               ) : (
-                                <span className="font-bold text-stone-900 dark:text-stone-100">
+                                <span className="font-semibold sm:font-bold text-stone-900 dark:text-stone-100">
                                   {item.quantity}
                                 </span>
                               )}
                             </div>
-
                             <button
                               onClick={() =>
                                 handleQuantityUpdate(item.id, item.quantity + 1)
                               }
                               disabled={isUpdating || isLoading}
-                              className="w-10 h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center"
+                              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white dark:hover:bg-stone-600 transition-colors flex items-center justify-center" // Adjusted size
                               style={{
-                                minWidth: "44px",
-                                minHeight: "44px",
+                                minWidth: "36px",
+                                minHeight: "36px",
                                 WebkitTapHighlightColor: "transparent",
-                              }}
+                              }} // Adjusted min size
                             >
                               <Plus className="w-4 h-4" />
                             </button>
                           </div>
-
-                          {/* Unit Price */}
                           {item.quantity > 1 && linePrice && (
                             <div className="text-xs text-stone-500 dark:text-stone-400">
                               {formatPrice(Number.parseFloat(linePrice.amount))}{" "}
-                              per stuk
+                              p.s.
                             </div>
                           )}
                         </div>
-
-                        {/* Loading Overlay */}
                         {(isUpdating || isRemoving) && (
-                          <div className="absolute inset-0 bg-white/80 dark:bg-stone-800/80 rounded-2xl flex items-center justify-center">
+                          <div className="absolute inset-0 bg-white/80 dark:bg-stone-800/80 rounded-xl sm:rounded-2xl flex items-center justify-center">
                             <div className="flex items-center gap-2 text-blue-600">
                               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                               <span className="text-sm font-medium">
@@ -490,22 +476,19 @@ export default function PremiumCartDrawer() {
               ))}
             </div>
 
-            {/* Premium Cart Summary */}
-            <div className="border-t border-stone-200 dark:border-stone-700 pt-4 space-y-4 bg-gradient-to-r from-stone-50 to-white dark:from-stone-800 dark:to-stone-900 -mx-6 px-6 pb-6 flex-shrink-0">
-              {/* Order Summary */}
+            {/* Cart Summary */}
+            <div className="border-t border-stone-200 dark:border-stone-700 pt-4 space-y-3 sm:space-y-4 bg-gradient-to-r from-stone-50 to-white dark:from-stone-800 dark:to-stone-900 px-4 sm:px-6 pb-4 sm:pb-6 flex-shrink-0">
               <div className="space-y-2">
                 <div className="flex justify-between text-stone-600 dark:text-stone-400 text-sm">
                   <span>Subtotaal ({shippingInfo.totalItems} items)</span>
                   <span>{formatPrice(shippingInfo.totalSubtotal)}</span>
                 </div>
-
-                {/* Shipping Details Collapsible */}
                 <Collapsible
                   open={showShippingDetails}
                   onOpenChange={setShowShippingDetails}
                 >
                   <CollapsibleTrigger asChild>
-                    <button className="flex items-center justify-between w-full text-stone-600 dark:text-stone-400 text-sm hover:text-stone-800 dark:hover:text-stone-200 transition-colors">
+                    <button className="flex items-center justify-between w-full text-stone-600 dark:text-stone-400 text-sm hover:text-stone-800 dark:hover:text-stone-200 transition-colors py-1">
                       <span>
                         Verzending ({shippingInfo.supplierCosts.length}{" "}
                         leveranciers)
@@ -526,15 +509,17 @@ export default function PremiumCartDrawer() {
                       </div>
                     </button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-2 mt-2">
+                  <CollapsibleContent className="space-y-1.5 sm:space-y-2 mt-1 sm:mt-2">
                     {shippingInfo.supplierCosts.map((supplierInfo) => (
                       <div
                         key={supplierInfo.supplier.id}
-                        className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pl-4"
+                        className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pl-2 sm:pl-4"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                           <span>{supplierInfo.supplier.icon}</span>
-                          <span>{supplierInfo.supplier.name}</span>
+                          <span className="truncate max-w-[120px] sm:max-w-none">
+                            {supplierInfo.supplier.name}
+                          </span>
                           <Badge
                             className={`${getSupplierColor(
                               supplierInfo.supplier.color
@@ -552,7 +537,6 @@ export default function PremiumCartDrawer() {
                     ))}
                   </CollapsibleContent>
                 </Collapsible>
-
                 <div className="border-t border-stone-200 dark:border-stone-700 pt-2">
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-bold text-stone-900 dark:text-stone-100">
@@ -564,30 +548,29 @@ export default function PremiumCartDrawer() {
                   </div>
                 </div>
               </div>
-
-              {/* Trust Indicators */}
-              <div className="grid grid-cols-3 gap-2 py-3 border-y border-stone-200 dark:border-stone-700">
+              <div className="grid grid-cols-3 gap-2 py-2 sm:py-3 border-y border-stone-200 dark:border-stone-700">
                 <div className="text-center">
-                  <Shield className="w-4 h-4 text-green-500 mx-auto mb-1" />
+                  {" "}
+                  <Shield className="w-4 h-4 text-green-500 mx-auto mb-0.5 sm:mb-1" />{" "}
                   <div className="text-xs text-stone-600 dark:text-stone-400">
                     Veilig betalen
-                  </div>
+                  </div>{" "}
                 </div>
                 <div className="text-center">
-                  <Clock className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                  {" "}
+                  <Clock className="w-4 h-4 text-blue-500 mx-auto mb-0.5 sm:mb-1" />{" "}
                   <div className="text-xs text-stone-600 dark:text-stone-400">
                     Snelle levering
-                  </div>
+                  </div>{" "}
                 </div>
                 <div className="text-center">
-                  <Gift className="w-4 h-4 text-purple-500 mx-auto mb-1" />
+                  {" "}
+                  <Gift className="w-4 h-4 text-purple-500 mx-auto mb-0.5 sm:mb-1" />{" "}
                   <div className="text-xs text-stone-600 dark:text-stone-400">
                     Gratis retour
-                  </div>
+                  </div>{" "}
                 </div>
               </div>
-
-              {/* CTA Buttons */}
               <div className="space-y-2">
                 <Button
                   onClick={() => {
@@ -603,23 +586,20 @@ export default function PremiumCartDrawer() {
                     }
                   }}
                   disabled={!cart?.checkoutUrl || isLoading}
-                  className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700 hover:from-blue-700 hover:via-purple-700 hover:to-blue-800 text-white text-base sm:text-lg py-3 sm:py-4 rounded-xl font-bold shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 touch-manipulation"
+                  className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700 hover:from-blue-700 hover:via-purple-700 hover:to-blue-800 text-white text-base py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 touch-manipulation"
                 >
                   <span>Veilig Afrekenen</span>
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                 </Button>
-
                 <Button
                   variant="outline"
                   onClick={closeCart}
-                  className="w-full btn-secondary py-2 sm:py-3 rounded-xl font-medium touch-manipulation"
+                  className="w-full btn-secondary py-2.5 sm:py-3 rounded-xl font-medium touch-manipulation"
                 >
                   Verder winkelen
                 </Button>
               </div>
-
-              {/* Security Badge */}
-              <div className="text-center">
+              <div className="text-center pt-1">
                 <div className="inline-flex items-center gap-2 text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-3 py-1.5 rounded-full">
                   <Shield className="w-3 h-3 text-green-500" />
                   <span>256-bit SSL • Shopify Secure</span>

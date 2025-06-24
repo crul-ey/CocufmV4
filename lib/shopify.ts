@@ -30,6 +30,7 @@ export interface ShopifyProduct {
   id: string
   title: string
   description: string
+  descriptionHtml: string // <-- TOEGEVOEGD
   handle: string
   vendor?: string
   images: {
@@ -65,6 +66,7 @@ export interface ShopifyCart {
             vendor?: string
             images: { edges: Array<{ node: { url: string; altText: string | null } }> }
             tags: string[]
+            // descriptionHtml is niet per se nodig in cart items, tenzij je het daar wilt tonen
           }
           price: { amount: string; currencyCode: string }
         }
@@ -88,7 +90,7 @@ async function shopifyFetch<T>(query: string, variables?: Record<string, unknown
       "X-Shopify-Storefront-Access-Token": SHOPIFY_TOKEN!,
     },
     body: JSON.stringify({ query, variables }),
-    cache: "no-store", // Ensure fresh data for cart operations
+    cache: "no-store",
   })
 
   if (!res.ok) {
@@ -101,7 +103,6 @@ async function shopifyFetch<T>(query: string, variables?: Record<string, unknown
 
   if (errors?.length) {
     console.error("Shopify GraphQL Errors:", JSON.stringify(errors, null, 2))
-    // Potentially include more error details if available
     const errorMessages = errors
       .map((err) => {
         let msg = err.message
@@ -119,35 +120,43 @@ async function shopifyFetch<T>(query: string, variables?: Record<string, unknown
 /* -------------------------------------------------------------------- */
 /*  4. PRODUCT QUERIES                                                  */
 /* -------------------------------------------------------------------- */
+const ProductFragment = /* GraphQL */ `
+  fragment ProductFields on Product {
+    id
+    title
+    description
+    descriptionHtml # <-- TOEGEVOEGD
+    handle
+    vendor
+    images(first: 10) { edges { node { url altText } } }
+    priceRange { minVariantPrice { amount currencyCode } }
+    variants(first: 10) {
+      edges {
+        node {
+          id
+          title
+          price { amount currencyCode }
+          availableForSale
+          quantityAvailable
+        }
+      }
+    }
+    tags
+  }
+`
+
 export async function getProducts(first = 20): Promise<ShopifyProduct[]> {
   const query = /* GraphQL */ `
     query getProducts($first: Int!) {
       products(first: $first) {
         edges {
           node {
-            id
-            title
-            description
-            handle
-            vendor
-            images(first: 5) { edges { node { url altText } } }
-            priceRange { minVariantPrice { amount currencyCode } }
-            variants(first: 1) {
-              edges {
-                node {
-                  id
-                  title
-                  price { amount currencyCode }
-                  availableForSale
-                  quantityAvailable
-                }
-              }
-            }
-            tags
+            ...ProductFields
           }
         }
       }
     }
+    ${ProductFragment}
   `
   const data = await shopifyFetch<{ products: { edges: Array<{ node: ShopifyProduct }> } }>(query, { first })
   return data.products.edges.map((e) => e.node)
@@ -157,27 +166,10 @@ export async function getProduct(handle: string): Promise<ShopifyProduct | null>
   const query = /* GraphQL */ `
     query getProduct($handle: String!) {
       product(handle: $handle) {
-        id
-        title
-        description
-        handle
-        vendor
-        images(first: 10) { edges { node { url altText } } }
-        priceRange { minVariantPrice { amount currencyCode } }
-        variants(first: 10) {
-          edges {
-            node {
-              id
-              title
-              price { amount currencyCode }
-              availableForSale
-              quantityAvailable
-            }
-          }
-        }
-        tags
+        ...ProductFields
       }
     }
+    ${ProductFragment}
   `
   const data = await shopifyFetch<{ product: ShopifyProduct | null }>(query, { handle })
   return data.product
@@ -189,29 +181,12 @@ export async function searchProducts(queryText: string, first = 20): Promise<Sho
       products(first: $first, query: $query) {
         edges {
           node {
-            id
-            title
-            description
-            handle
-            vendor
-            images(first: 5) { edges { node { url altText } } }
-            priceRange { minVariantPrice { amount currencyCode } }
-            variants(first: 1) {
-              edges {
-                node {
-                  id
-                  title
-                  price { amount currencyCode }
-                  availableForSale
-                  quantityAvailable
-                }
-              }
-            }
-            tags
+            ...ProductFields
           }
         }
       }
     }
+    ${ProductFragment}
   `
   const formattedQuery = `title:*${queryText}* OR tag:*${queryText}* OR product_type:*${queryText}*`
   const data = await shopifyFetch<{ products: { edges: Array<{ node: ShopifyProduct }> } }>(searchQuery, {
@@ -289,7 +264,6 @@ export async function addToCart(cartId: string, variantId: string, quantity = 1)
 
   if (data.cartLinesAdd.userErrors?.length) {
     console.error("❌ Shopify cartLinesAdd UserErrors:", data.cartLinesAdd.userErrors)
-    // Handle specific errors like "merchandise ID is invalid" or "cart ID is invalid"
     const errorMessages = data.cartLinesAdd.userErrors
       .map((e) => `${e.code}: ${e.message} (Field: ${e.field})`)
       .join(", ")
@@ -319,7 +293,7 @@ export async function getCart(cartId: string): Promise<ShopifyCart | null> {
     return data.cart
   } catch (error) {
     console.error("❌ Error fetching Shopify cart:", cartId, error)
-    return null // Return null if cart fetch fails, so a new one can be created
+    return null
   }
 }
 
