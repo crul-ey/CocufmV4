@@ -1,20 +1,20 @@
-//  Shopify Storefront helpers
-//  All calls run on the SERVER so your credentials stay safe
+// Shopify Storefront helpers
+// All calls run on the SERVER so your credentials stay safe
 
 /* -------------------------------------------------------------------- */
-/*  ❗ 1. ENVIRONMENT VARIABLES CHECK                                    */
+/* ❗ 1. ENVIRONMENT VARIABLES CHECK                                    */
 /* -------------------------------------------------------------------- */
 const SHOPIFY_DOMAIN = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN;
 const SHOPIFY_TOKEN = process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN;
 
 if (!SHOPIFY_DOMAIN || !SHOPIFY_TOKEN) {
   throw new Error(
-    "⚠️  Missing Shopify env vars. Add NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN and NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN."
+    "⚠️ Missing Shopify env vars. Add NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN and NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN."
   );
 }
 
 /* -------------------------------------------------------------------- */
-/*  2. TYPES                                                            */
+/* 2. TYPES                                                            */
 /* -------------------------------------------------------------------- */
 export interface ShopifyVariant {
   id: string;
@@ -77,7 +77,7 @@ export interface ShopifyCart {
 }
 
 /* -------------------------------------------------------------------- */
-/*  3. LOW-LEVEL fetch WRAPPER                                          */
+/* 3. LOW-LEVEL fetch WRAPPER                                          */
 /* -------------------------------------------------------------------- */
 const SHOPIFY_ENDPOINT = `https://${SHOPIFY_DOMAIN}/api/2023-10/graphql.json`;
 
@@ -123,7 +123,7 @@ async function shopifyFetch<T>(
 }
 
 /* -------------------------------------------------------------------- */
-/*  4. PRODUCT QUERIES                                                  */
+/* 4. PRODUCT QUERIES                                                  */
 /* -------------------------------------------------------------------- */
 const ProductFragment = /* GraphQL */ `
   fragment ProductFields on Product {
@@ -213,7 +213,7 @@ export async function searchProducts(
 }
 
 /* -------------------------------------------------------------------- */
-/*  5. CART MUTATIONS / QUERIES                                         */
+/* 5. CART MUTATIONS / QUERIES                                         */
 /* -------------------------------------------------------------------- */
 const CartFieldsFragment = /* GraphQL */ `
   fragment CartFields on Cart {
@@ -274,6 +274,20 @@ export async function addToCart(
   quantity = 1
 ): Promise<ShopifyCart> {
   console.log("🔗 Shopify addToCart called:", { cartId, variantId, quantity });
+
+  // ➕ Sanity checks
+  if (!variantId || !variantId.startsWith("gid://shopify/ProductVariant/")) {
+    const msg = `❌ Ongeldig variantId meegegeven: ${variantId}`;
+    console.error(msg);
+    throw new Error(msg);
+  }
+
+  if (!cartId || !cartId.startsWith("gid://shopify/Cart/")) {
+    const msg = `❌ Ongeldig cartId meegegeven: ${cartId}`;
+    console.error(msg);
+    throw new Error(msg);
+  }
+
   const query = /* GraphQL */ `
     mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
       cartLinesAdd(cartId: $cartId, lines: $lines) {
@@ -283,7 +297,26 @@ export async function addToCart(
     }
     ${CartFieldsFragment}
   `;
-  const variables = { cartId, lines: [{ merchandiseId: variantId, quantity }] };
+
+  const variables = {
+    cartId,
+    lines: [
+      {
+        merchandiseId: variantId,
+        quantity,
+      },
+    ],
+  };
+
+  // Deze console.log hoort vóór de aanroep van `shopifyFetch` als je de `selectedVariant.id` wilt loggen voordat deze wordt gebruikt.
+  // Echter, gezien de context "Zet boven je await addItem(...):", en deze functie is `addToCart`,
+  // neem ik aan dat `addItem` een aanroep is die deze `addToCart` functie gebruikt.
+  // Dus, als je de log specifiek voor een `addItem` aanroep elders bedoelt, moet die log daar staan.
+  // Voor nu voeg ik de log hier toe, in de `addToCart` functie, als illustratie van waar een dergelijke log zou kunnen staan.
+  // De `selectedVariant.id` variabele is hier echter niet direct beschikbaar, deze zou van buiten de functie moeten komen.
+  // Als `selectedVariant.id` de `variantId` is die hier wordt doorgegeven, dan is dit de juiste plek.
+  console.log("🧪 variantId (selectedVariant.id):", variantId); // Aangenomen dat variantId de selectedVariant.id is
+
   const data = await shopifyFetch<{
     cartLinesAdd: { cart: ShopifyCart; userErrors: any[] };
   }>(query, variables);
@@ -291,11 +324,12 @@ export async function addToCart(
   if (data.cartLinesAdd.userErrors?.length) {
     console.error("❌ Shopify cartLinesAdd UserErrors:", data.cartLinesAdd.userErrors);
     const errorMessages = data.cartLinesAdd.userErrors
-      .map((e) => `${e.code}: ${e.message} (Field: ${e.field})`)
-      .join(", ");
+      .map((e) => `${e.code || "unknown"}: ${e.message} (Field: ${e.field})`)
+      .join("; ");
     throw new Error(errorMessages);
   }
-  console.log("✅ Shopify addToCart success for cart:", cartId);
+
+  console.log("✅ Shopify addToCart success:", data.cartLinesAdd.cart.id);
   return data.cartLinesAdd.cart;
 }
 
