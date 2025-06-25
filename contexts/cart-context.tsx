@@ -10,7 +10,8 @@ import {
 } from "react";
 import {
   type ShopifyCart,
-  type ShopifyCartLineMerchandise, // Import this for better typing
+  type ShopifyCartLineMerchandise,
+  type ShopifyImageNode, // Import for explicit typing
   createCart,
   getCart,
   addToCart as shopifyAddToCart,
@@ -18,43 +19,37 @@ import {
   updateCartLine,
 } from "@/lib/shopify";
 
-// Enhanced CartItem interface
 export interface CartItem {
-  id: string; // Line ID
-  variantId: string; // Variant ID (merchandise.id)
-  productId: string; // Product ID (merchandise.product.id)
-  title: string; // Variant title (merchandise.title)
+  id: string;
+  variantId: string;
+  productId: string;
+  title: string;
   quantity: number;
-  image: string | null;
+  image: ShopifyImageNode | null; // ✅ Use ShopifyImageNode type
   price: {
-    // Variant price
     amount: string;
     currencyCode: string;
   };
   compareAtPrice?: {
-    // Variant compareAtPrice
     amount: string;
     currencyCode: string;
   } | null;
   totalPrice: {
-    // Line total cost
     amount: string;
     currencyCode: string;
   };
-  productTitle: string; // Parent product title
-  productHandle: string; // Parent product handle
-  vendor: string; // Parent product vendor
-  tags: string[]; // Parent product tags
+  productTitle: string;
+  productHandle: string;
+  vendor: string;
+  tags: string[];
   selectedOptions: Array<{
-    // Variant selected options
     name: string;
     value: string;
   }>;
-  availableForSale: boolean; // Variant availability
-  quantityAvailable: number; // Variant quantity available
+  availableForSale: boolean;
+  quantityAvailable: number;
 }
 
-// Custom error types for better error handling
 export class CartInitializationError extends Error {
   constructor(message: string) {
     super(message);
@@ -80,6 +75,7 @@ interface CartContextType {
   isOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
+  error: string | null; // ✅ Add error state
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -88,13 +84,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<ShopifyCart | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null); // ✅ Initialize error state
 
-  // Convert Shopify cart to simplified items array
   const items: CartItem[] =
     cart?.lines.edges.map((edge) => {
       const line = edge.node;
-      const merchandise = line.merchandise as ShopifyCartLineMerchandise; // Type assertion
-      const imageNode = merchandise.images?.edges?.[0]?.node;
+      const merchandise = line.merchandise as ShopifyCartLineMerchandise;
 
       return {
         id: line.id,
@@ -102,7 +97,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         productId: merchandise.product.id,
         title: merchandise.title,
         quantity: line.quantity,
-        image: imageNode?.url || null,
+        image: merchandise.image || null, // ✅ Use merchandise.image
         price: merchandise.price,
         compareAtPrice: merchandise.compareAtPrice,
         totalPrice: line.cost.totalAmount,
@@ -112,13 +107,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         tags: merchandise.product.tags,
         selectedOptions: merchandise.selectedOptions,
         availableForSale: merchandise.availableForSale,
-        quantityAvailable: merchandise.quantityAvailable || 0, // Ensure it's a number
+        quantityAvailable: merchandise.quantityAvailable || 0,
       };
     }) || [];
 
-  // Initialize cart function
   const initializeCart = useCallback(async (): Promise<ShopifyCart | null> => {
     setIsLoading(true);
+    setError(null); // ✅ Clear previous errors
     try {
       const cartId = localStorage.getItem("shopify-cart-id");
       console.log("🛒 Initializing cart. Stored cartId:", cartId);
@@ -133,20 +128,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
           console.warn(
             "⚠️ Stored cartId is invalid or expired. Removing it and creating new cart."
           );
-          localStorage.removeItem("shopify-cart-id"); // Remove invalid ID
+          localStorage.removeItem("shopify-cart-id");
         }
       }
 
-      // Create new cart if none exists or existing cart is invalid
       const newCartId = await createCart();
       localStorage.setItem("shopify-cart-id", newCartId);
-      const newCart = await getCart(newCartId); // Fetch the newly created cart
+      const newCart = await getCart(newCartId);
       if (!newCart) {
-        // This case should be rare if createCart and getCart are robust
-        console.error(
-          "❌ Critical: Failed to retrieve newly created cart immediately after creation. Cart ID:",
-          newCartId
-        );
+        const errMsg = `Critical: Failed to retrieve newly created cart immediately after creation. Cart ID: ${newCartId}`;
+        console.error(errMsg);
+        setError(errMsg); // ✅ Set error state
         throw new CartInitializationError(
           "Failed to retrieve newly created cart."
         );
@@ -154,38 +146,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setCart(newCart);
       console.log("✅ New cart created and loaded:", newCart.id);
       return newCart;
-    } catch (error) {
-      console.error(
-        "❌ Error initializing cart:",
-        error instanceof Error ? error.message : String(error)
-      );
-      // Don't re-throw here if it's a common issue like network error, allow UI to show loading/error state
-      // Only throw for critical unrecoverable issues if necessary.
-      // For now, we'll let it fail and the UI can react to isLoading and cart being null.
-      // throw new CartInitializationError(
-      //   `Failed to initialize cart: ${error instanceof Error ? error.message : String(error)}`,
-      // )
-      return null; // Indicate failure to initialize
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("❌ Error initializing cart:", errorMsg);
+      setError(`Initialisatie fout: ${errorMsg}`); // ✅ Set error state
+      return null;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Initialize cart on mount
   useEffect(() => {
-    initializeCart().catch((err) => {
-      // This catch is for unhandled promise rejections from initializeCart itself,
-      // though we try to handle errors within initializeCart.
-      console.error(
-        "Critical error during cart initialization on mount (unhandled):",
-        err
-      );
-    });
+    initializeCart(); // Removed .catch as errors are handled within and set to state
   }, [initializeCart]);
 
   const addItem = useCallback(
     async (variantId: string, quantity = 1) => {
       setIsLoading(true);
+      setError(null); // ✅ Clear previous errors
       let currentCart = cart;
 
       try {
@@ -195,10 +173,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
           );
           currentCart = await initializeCart();
           if (!currentCart) {
-            // If initialization still fails, we cannot proceed.
-            throw new CartInitializationError(
-              "Failed to initialize cart before adding item."
-            );
+            const initErrorMsg =
+              "Kon winkelwagen niet initialiseren voor toevoegen item.";
+            setError(initErrorMsg); // ✅ Set error state
+            throw new CartInitializationError(initErrorMsg);
           }
           console.log("✅ Cart initialized successfully during addItem.");
         }
@@ -212,45 +190,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
           quantity
         );
         setCart(updatedCart);
-        setIsOpen(true); // Open cart drawer on successful add
+        setIsOpen(true);
         console.log("✅ Successfully added to cart. Cart ID:", updatedCart.id);
-      } catch (error) {
-        console.error("❌ Error adding item to cart:", error);
-        // Potentially try to re-initialize cart if error suggests cart ID invalid
-        if (
-          error instanceof Error &&
-          (error.message.includes("cart_id") ||
-            error.message.includes("No cart found"))
-        ) {
-          console.warn(
-            "Cart ID might be invalid. Attempting to re-initialize and retry add to cart."
-          );
-          try {
-            const freshCart = await initializeCart();
-            if (freshCart) {
-              const updatedCartOnRetry = await shopifyAddToCart(
-                freshCart.id,
-                variantId,
-                quantity
-              );
-              setCart(updatedCartOnRetry);
-              setIsOpen(true);
-              console.log(
-                "✅ Successfully added to cart on retry with new cart!"
-              );
-              return;
-            }
-          } catch (retryError) {
-            console.error("❌ Retry to add to cart also failed:", retryError);
-          }
-        }
-        // If retry fails or error is different, re-throw or handle as appropriate
-        // For now, we'll let the error be caught by a higher-level handler or shown in UI
-        throw new CartModificationError(
-          `Failed to add item to cart: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error("❌ Error adding item to cart:", errorMsg);
+        setError(`Fout bij toevoegen: ${errorMsg}`); // ✅ Set error state
+        // No re-throw, let UI handle error state
       } finally {
         setIsLoading(false);
       }
@@ -262,25 +208,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
     async (lineId: string) => {
       if (!cart) {
         console.warn("🚫 Cannot remove item: No cart available.");
+        setError("Winkelwagen niet beschikbaar voor verwijderen item."); // ✅ Set error state
         return;
       }
-
       setIsLoading(true);
+      setError(null); // ✅ Clear previous errors
       try {
         console.log(`🗑️ Removing line ${lineId} from cart ${cart.id}`);
         const updatedCart = await removeFromCart(cart.id, lineId);
         setCart(updatedCart);
         console.log("✅ Item successfully removed.");
-      } catch (error) {
-        console.error(
-          `❌ Error removing line ${lineId} from cart:`,
-          error instanceof Error ? error.message : String(error)
-        );
-        throw new CartModificationError(
-          `Failed to remove item from cart: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`❌ Error removing line ${lineId} from cart:`, errorMsg);
+        setError(`Fout bij verwijderen: ${errorMsg}`); // ✅ Set error state
       } finally {
         setIsLoading(false);
       }
@@ -292,15 +233,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     async (lineId: string, quantity: number) => {
       if (!cart) {
         console.warn("🚫 Cannot update quantity: No cart available.");
+        setError("Winkelwagen niet beschikbaar voor update hoeveelheid."); // ✅ Set error state
         return;
       }
       if (quantity <= 0) {
-        // Shopify typically handles removal for 0 quantity, but good to guard
         await removeItem(lineId);
         return;
       }
-
       setIsLoading(true);
+      setError(null); // ✅ Clear previous errors
       try {
         console.log(
           `🔄 Updating line ${lineId} in cart ${cart.id} to quantity ${quantity}`
@@ -308,21 +249,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const updatedCart = await updateCartLine(cart.id, lineId, quantity);
         setCart(updatedCart);
         console.log("✅ Cart quantity successfully updated.");
-      } catch (error) {
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
         console.error(
           `❌ Error updating quantity for line ${lineId} in cart:`,
-          error instanceof Error ? error.message : String(error)
+          errorMsg
         );
-        throw new CartModificationError(
-          `Failed to update item quantity in cart: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+        setError(`Fout bij update hoeveelheid: ${errorMsg}`); // ✅ Set error state
       } finally {
         setIsLoading(false);
       }
     },
-    [cart, removeItem] // Added removeItem dependency
+    [cart, removeItem]
   );
 
   const cartCount = items.reduce(
@@ -346,6 +284,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         isOpen,
         openCart,
         closeCart,
+        error, // ✅ Provide error state
       }}
     >
       {children}
