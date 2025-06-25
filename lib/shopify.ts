@@ -173,7 +173,7 @@ const ProductFragment = /* GraphQL */ `
   }
 `;
 
-export async function getProductsByTag(tag: string, first = 100): Promise<ShopifyProduct[]> {
+export async function getProducts(tag: string, first = 100): Promise<ShopifyProduct[]> {
   const query = /* GraphQL */ `
     query getProducts($first: Int!, $query: String!) {
       products(first: $first, query: $query) {

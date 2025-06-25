@@ -1,11 +1,11 @@
 // app/sitemap.xml/route.ts
 import type { MetadataRoute } from "next"
-import { getProductsByTag } from "@/lib/shopify"
+import { getProducts as fetchProducts } from "@/lib/shopify"
 
 // Helper: universele fallback als 'getProducts' niet (meer) bestaat
 async function getProducts(first = 250) {
   // Lege tag betekent: geen filter, dus ALLE producten
-  return getProductsByTag("", first);
+  return fetchProducts("", first);
 }
 
 // Helper om geldige ISO-datum te krijgen
