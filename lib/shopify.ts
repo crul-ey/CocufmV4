@@ -37,6 +37,8 @@ export interface ShopifyProduct {
   readonly descriptionHtml: string;
   readonly handle: string;
   readonly vendor?: string;
+  readonly createdAt: string;      // <-- toevoegen!
+  readonly updatedAt: string;      // <-- toevoegen!
   readonly images: {
     readonly edges: ReadonlyArray<{ readonly node: { url: string; altText: string | null } }>;
   };
@@ -51,7 +53,7 @@ export interface ShopifyProduct {
       readonly node: ShopifyVariant;
     }>;
   };
-  readonly tags: ReadonlyArray<string>; // Gebruik ReadonlyArray
+  readonly tags: ReadonlyArray<string>;
 }
 
 export interface ShopifyCart {
@@ -152,6 +154,8 @@ const ProductFragment = /* GraphQL */ `
     descriptionHtml
     handle
     vendor
+    createdAt
+    updatedAt
     images(first: 10) { edges { node { url altText } } }
     priceRange { minVariantPrice { amount currencyCode } }
     variants(first: 10) {
