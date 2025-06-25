@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { getProducts } from "@/lib/shopify";
+import { getAllProducts } from "@/lib/shopify";
 import Header from "@/components/header";
 import CartDrawer from "@/components/cart-drawer";
 import ProductGrid from "@/components/product-grid";
@@ -29,8 +29,8 @@ function ProductGridWrapper() {
 }
 
 async function ProductGridContent() {
-  // Fetch more products for better sorting demonstration
-  const products = await getProducts(250);
+  // 🚀 Haal ALLE producten op - geen limiet meer!
+  const products = await getAllProducts();
 
   // Ensure each product has proper dates for sorting
   const productsWithDates = products.map((product: any, index: number) => ({
@@ -167,7 +167,7 @@ export default function ShopPage() {
           <div className="text-center max-w-4xl mx-auto mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-stone-900/10 to-stone-700/10 dark:from-stone-100/10 dark:to-stone-300/10 text-stone-700 dark:text-stone-300 text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
-              Premium Collectie 2025
+              Premium Collectie 2024
             </div>
 
             <h1 className="font-serif text-4xl lg:text-6xl font-bold text-stone-900 dark:text-stone-100 mb-6 leading-tight">

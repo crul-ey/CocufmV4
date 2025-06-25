@@ -1,13 +1,15 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { searchProducts } from "@/lib/shopify";
 import Header from "@/components/header";
 import CartDrawer from "@/components/cart-drawer";
 import ProductGrid from "@/components/product-grid";
-import { Search, ArrowLeft } from "lucide-react";
+import { Search, ArrowLeft, Filter } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useRouter } from "next/navigation";
 
 interface SearchPageProps {
   searchParams: { q?: string };
@@ -21,53 +23,95 @@ function SearchResultsWrapper({ query }: { query: string }) {
   );
 }
 
-async function SearchResultsContent({ query }: { query: string }) {
-  try {
-    const products = await searchProducts(query, 24);
+function SearchResultsContent({ query }: { query: string }) {
+  const [products, setProducts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    // Add createdAt for sorting
-    const productsWithCreatedAt = products.map(
-      (product: any, index: number) => ({
-        ...product,
-        createdAt:
-          product.createdAt ??
-          new Date(Date.now() - index * 86400000).toISOString(),
-      })
-    );
+  useEffect(() => {
+    async function fetchResults() {
+      if (!query.trim()) {
+        setProducts([]);
+        setIsLoading(false);
+        return;
+      }
 
-    return (
-      <div className="space-y-8">
-        {/* Results header */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-stone-900 dark:text-stone-100 mb-2">
-              {products.length > 0 ? (
-                <>
-                  {products.length} resultaten voor "{query}"
-                </>
-              ) : (
-                <>Geen resultaten voor "{query}"</>
-              )}
-            </h2>
-            {products.length > 0 && (
-              <p className="text-stone-600 dark:text-stone-400">
-                Gevonden in onze collectie van premium zomerproducten
-              </p>
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        console.log(`🔍 Searching for: "${query}"`);
+        const results = await searchProducts(query, 50);
+
+        // Add createdAt for sorting if missing
+        const productsWithCreatedAt = results.map(
+          (product: any, index: number) => ({
+            ...product,
+            createdAt:
+              product.createdAt ??
+              new Date(Date.now() - index * 86400000).toISOString(),
+          })
+        );
+
+        setProducts(productsWithCreatedAt);
+        console.log(`✅ Search completed: ${results.length} products found`);
+      } catch (error) {
+        console.error("Search error:", error);
+        setError("Er ging iets mis bij het zoeken. Probeer het opnieuw.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchResults();
+  }, [query]);
+
+  if (isLoading) {
+    return <SearchResultsSkeleton />;
+  }
+
+  if (error) {
+    return <SearchError error={error} />;
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Results header */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-stone-900 dark:text-stone-100 mb-2">
+            {products.length > 0 ? (
+              <>
+                {products.length} resultaten voor "{query}"
+              </>
+            ) : (
+              <>Geen resultaten voor "{query}"</>
             )}
-          </div>
+          </h2>
+          {products.length > 0 && (
+            <p className="text-stone-600 dark:text-stone-400">
+              Gevonden in onze collectie van premium producten
+            </p>
+          )}
         </div>
 
-        {products.length > 0 ? (
-          <ProductGrid products={productsWithCreatedAt} showFilters={true} />
-        ) : (
-          <NoResults query={query} />
+        {products.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Filter className="w-3 h-3" />
+              Filters beschikbaar
+            </Badge>
+          </div>
         )}
       </div>
-    );
-  } catch (error) {
-    console.error("Search error:", error);
-    return <SearchError />;
-  }
+
+      {products.length > 0 ? (
+        <ProductGrid products={products} showFilters={true} />
+      ) : (
+        <NoResults query={query} />
+      )}
+    </div>
+  );
 }
 
 function SearchResultsSkeleton() {
@@ -79,6 +123,7 @@ function SearchResultsSkeleton() {
           <div className="h-8 bg-stone-200 dark:bg-stone-700 rounded w-64 animate-pulse" />
           <div className="h-4 bg-stone-200 dark:bg-stone-700 rounded w-48 animate-pulse" />
         </div>
+        <div className="h-6 bg-stone-200 dark:bg-stone-700 rounded w-32 animate-pulse" />
       </div>
 
       {/* Products skeleton */}
@@ -108,6 +153,8 @@ function SearchResultsSkeleton() {
 }
 
 function NoResults({ query }: { query: string }) {
+  const router = useRouter();
+
   const suggestions = [
     "Controleer je spelling",
     "Probeer meer algemene zoektermen",
@@ -119,7 +166,9 @@ function NoResults({ query }: { query: string }) {
     { term: "strandhanddoek", href: "/search?q=strandhanddoek" },
     { term: "zomer", href: "/search?q=zomer" },
     { term: "strand", href: "/search?q=strand" },
-    { term: "accessoires", href: "/search?q=accessoires" },
+    { term: "parfum", href: "/search?q=parfum" },
+    { term: "kids", href: "/search?q=kids" },
+    { term: "lifestyle", href: "/search?q=lifestyle" },
   ];
 
   return (
@@ -157,13 +206,13 @@ function NoResults({ query }: { query: string }) {
         </h4>
         <div className="flex flex-wrap justify-center gap-2">
           {popularSearches.map((search) => (
-            <Link
+            <button
               key={search.term}
-              href={search.href}
+              onClick={() => router.push(search.href)}
               className="px-4 py-2 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-full hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors duration-200"
             >
               {search.term}
-            </Link>
+            </button>
           ))}
         </div>
       </div>
@@ -175,7 +224,7 @@ function NoResults({ query }: { query: string }) {
   );
 }
 
-function SearchError() {
+function SearchError({ error }: { error: string }) {
   return (
     <div className="text-center py-16">
       <div className="w-24 h-24 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-8">
@@ -187,8 +236,7 @@ function SearchError() {
       </h3>
 
       <p className="text-stone-600 dark:text-stone-400 mb-8 max-w-md mx-auto">
-        We konden je zoekopdracht niet uitvoeren. Probeer het opnieuw of ga
-        terug naar de shop.
+        {error}
       </p>
 
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -271,7 +319,7 @@ export default function SearchPageClient({ searchParams }: SearchPageProps) {
 
             {query && (
               <p className="text-lg text-stone-600 dark:text-stone-400 max-w-2xl mx-auto">
-                Doorzoek onze volledige collectie van premium zomerproducten
+                Doorzoek onze volledige collectie van premium producten
               </p>
             )}
           </div>

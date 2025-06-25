@@ -1,4 +1,3 @@
-// contexts/cart-context.tsx
 "use client";
 
 import {
@@ -7,18 +6,55 @@ import {
   useEffect,
   useState,
   type ReactNode,
-  useCallback, // useCallback to prevent unnecessary re-renders/re-creations of functions
+  useCallback,
 } from "react";
 import {
   type ShopifyCart,
+  type ShopifyCartLineMerchandise, // Import this for better typing
   createCart,
   getCart,
-  addToCart as shopifyAddToCart, // Alias for clarity
+  addToCart as shopifyAddToCart,
   removeFromCart,
   updateCartLine,
 } from "@/lib/shopify";
 
-// Definieer aangepaste fouttypen voor betere foutafhandeling in de UI
+// Enhanced CartItem interface
+export interface CartItem {
+  id: string; // Line ID
+  variantId: string; // Variant ID (merchandise.id)
+  productId: string; // Product ID (merchandise.product.id)
+  title: string; // Variant title (merchandise.title)
+  quantity: number;
+  image: string | null;
+  price: {
+    // Variant price
+    amount: string;
+    currencyCode: string;
+  };
+  compareAtPrice?: {
+    // Variant compareAtPrice
+    amount: string;
+    currencyCode: string;
+  } | null;
+  totalPrice: {
+    // Line total cost
+    amount: string;
+    currencyCode: string;
+  };
+  productTitle: string; // Parent product title
+  productHandle: string; // Parent product handle
+  vendor: string; // Parent product vendor
+  tags: string[]; // Parent product tags
+  selectedOptions: Array<{
+    // Variant selected options
+    name: string;
+    value: string;
+  }>;
+  availableForSale: boolean; // Variant availability
+  quantityAvailable: number; // Variant quantity available
+}
+
+// Custom error types for better error handling
 export class CartInitializationError extends Error {
   constructor(message: string) {
     super(message);
@@ -35,6 +71,7 @@ export class CartModificationError extends Error {
 
 interface CartContextType {
   cart: ShopifyCart | null;
+  items: CartItem[];
   isLoading: boolean;
   addItem: (variantId: string, quantity?: number) => Promise<void>;
   removeItem: (lineId: string) => Promise<void>;
@@ -52,12 +89,38 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Function to initialize or retrieve the cart
-  // Gebruik useCallback om te voorkomen dat deze functie onnodig opnieuw wordt gemaakt
+  // Convert Shopify cart to simplified items array
+  const items: CartItem[] =
+    cart?.lines.edges.map((edge) => {
+      const line = edge.node;
+      const merchandise = line.merchandise as ShopifyCartLineMerchandise; // Type assertion
+      const imageNode = merchandise.images?.edges?.[0]?.node;
+
+      return {
+        id: line.id,
+        variantId: merchandise.id,
+        productId: merchandise.product.id,
+        title: merchandise.title,
+        quantity: line.quantity,
+        image: imageNode?.url || null,
+        price: merchandise.price,
+        compareAtPrice: merchandise.compareAtPrice,
+        totalPrice: line.cost.totalAmount,
+        productTitle: merchandise.product.title,
+        productHandle: merchandise.product.handle,
+        vendor: merchandise.product.vendor,
+        tags: merchandise.product.tags,
+        selectedOptions: merchandise.selectedOptions,
+        availableForSale: merchandise.availableForSale,
+        quantityAvailable: merchandise.quantityAvailable || 0, // Ensure it's a number
+      };
+    }) || [];
+
+  // Initialize cart function
   const initializeCart = useCallback(async (): Promise<ShopifyCart | null> => {
-    setIsLoading(true); // Zet loading op true tijdens initialisatie
+    setIsLoading(true);
     try {
-      let cartId = localStorage.getItem("shopify-cart-id");
+      const cartId = localStorage.getItem("shopify-cart-id");
       console.log("🛒 Initializing cart. Stored cartId:", cartId);
 
       if (cartId) {
@@ -67,147 +130,205 @@ export function CartProvider({ children }: { children: ReactNode }) {
           console.log("✅ Existing cart loaded:", existingCart.id);
           return existingCart;
         } else {
-          // If cartId exists but getCart returns null (e.g., cart expired/deleted)
-          console.warn("⚠️ Stored cartId is invalid or expired. Creating new cart.");
+          console.warn(
+            "⚠️ Stored cartId is invalid or expired. Removing it and creating new cart."
+          );
+          localStorage.removeItem("shopify-cart-id"); // Remove invalid ID
         }
       }
 
       // Create new cart if none exists or existing cart is invalid
       const newCartId = await createCart();
       localStorage.setItem("shopify-cart-id", newCartId);
-      const newCart = await getCart(newCartId); // Haal de zojuist gemaakte winkelwagen op
+      const newCart = await getCart(newCartId); // Fetch the newly created cart
       if (!newCart) {
-          throw new CartInitializationError("Failed to retrieve newly created cart.");
+        // This case should be rare if createCart and getCart are robust
+        console.error(
+          "❌ Critical: Failed to retrieve newly created cart immediately after creation. Cart ID:",
+          newCartId
+        );
+        throw new CartInitializationError(
+          "Failed to retrieve newly created cart."
+        );
       }
       setCart(newCart);
       console.log("✅ New cart created and loaded:", newCart.id);
       return newCart;
     } catch (error) {
-      console.error("❌ Error initializing cart:", error instanceof Error ? error.message : String(error));
-      // Gooi een meer specifieke fout door
-      throw new CartInitializationError(`Failed to initialize cart: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        "❌ Error initializing cart:",
+        error instanceof Error ? error.message : String(error)
+      );
+      // Don't re-throw here if it's a common issue like network error, allow UI to show loading/error state
+      // Only throw for critical unrecoverable issues if necessary.
+      // For now, we'll let it fail and the UI can react to isLoading and cart being null.
+      // throw new CartInitializationError(
+      //   `Failed to initialize cart: ${error instanceof Error ? error.message : String(error)}`,
+      // )
+      return null; // Indicate failure to initialize
     } finally {
-      setIsLoading(false); // Zet loading altijd uit
+      setIsLoading(false);
     }
-  }, []); // Lege dependency array betekent dat de functie maar één keer wordt gemaakt
+  }, []);
 
   // Initialize cart on mount
   useEffect(() => {
-    initializeCart().catch(err => {
-      console.error("Critical error during cart initialization on mount:", err);
-      // Hier kun je evt. een melding tonen aan de gebruiker dat de winkelwagen niet geladen kon worden
-      // toast({ title: "Winkelwagen fout", description: "Kon winkelwagen niet laden.", variant: "destructive" });
+    initializeCart().catch((err) => {
+      // This catch is for unhandled promise rejections from initializeCart itself,
+      // though we try to handle errors within initializeCart.
+      console.error(
+        "Critical error during cart initialization on mount (unhandled):",
+        err
+      );
     });
-  }, [initializeCart]); // initializeCart is nu een stabiele functie door useCallback
+  }, [initializeCart]);
 
-  const addItem = useCallback(async (variantId: string, quantity = 1) => {
-    setIsLoading(true);
-    let currentCart = cart;
+  const addItem = useCallback(
+    async (variantId: string, quantity = 1) => {
+      setIsLoading(true);
+      let currentCart = cart;
 
-    try {
-      // If no cart, initialize one first. This covers initial load and expired carts.
-      if (!currentCart) {
-        console.log("🔄 No cart found, attempting to initialize...");
-        try {
+      try {
+        if (!currentCart) {
+          console.log(
+            "🔄 No cart found during addItem, attempting to initialize..."
+          );
           currentCart = await initializeCart();
           if (!currentCart) {
-            throw new Error("Failed to initialize cart after attempt."); // Moet zelden gebeuren door throw in initializeCart
+            // If initialization still fails, we cannot proceed.
+            throw new CartInitializationError(
+              "Failed to initialize cart before adding item."
+            );
           }
           console.log("✅ Cart initialized successfully during addItem.");
-        } catch (initError) {
-          console.error("❌ Failed to initialize cart during addItem:", initError);
-          throw new CartInitializationError(`Could not initialize cart to add item: ${initError instanceof Error ? initError.message : String(initError)}`);
         }
-      }
 
-      console.log(`🛒 Attempting to add variant ${variantId} (qty: ${quantity}) to cart ${currentCart.id}`);
-      const updatedCart = await shopifyAddToCart(
-        currentCart.id,
-        variantId,
-        quantity
-      );
-      setCart(updatedCart);
-      setIsOpen(true);
-      console.log("✅ Successfully added to cart. Cart ID:", updatedCart.id);
-
-    } catch (error) {
-      console.error("❌ Error adding to cart (initial attempt):", error);
-      // Probeer de winkelwagen opnieuw te initialiseren en probeer het nog een keer
-      // Dit vangt gevallen op waarin de cart ID onlangs ongeldig is geworden
-      if (error instanceof Error && (error.message.includes("Invalid cartId") || error.name === "AddToCartError")) {
-          console.log("🔄 Cart ID might be invalid. Retrying with a new cart...");
+        console.log(
+          `🛒 Attempting to add variant ${variantId} (qty: ${quantity}) to cart ${currentCart.id}`
+        );
+        const updatedCart = await shopifyAddToCart(
+          currentCart.id,
+          variantId,
+          quantity
+        );
+        setCart(updatedCart);
+        setIsOpen(true); // Open cart drawer on successful add
+        console.log("✅ Successfully added to cart. Cart ID:", updatedCart.id);
+      } catch (error) {
+        console.error("❌ Error adding item to cart:", error);
+        // Potentially try to re-initialize cart if error suggests cart ID invalid
+        if (
+          error instanceof Error &&
+          (error.message.includes("cart_id") ||
+            error.message.includes("No cart found"))
+        ) {
+          console.warn(
+            "Cart ID might be invalid. Attempting to re-initialize and retry add to cart."
+          );
           try {
-              const newCart = await initializeCart(); // Initialiseert een nieuwe cart
-              if (newCart) {
-                  console.log(`🔄 Retrying add to cart with new cart ${newCart.id} for variant ${variantId}`);
-                  const updatedCartOnRetry = await shopifyAddToCart(
-                      newCart.id,
-                      variantId,
-                      quantity
-                  );
-                  setCart(updatedCartOnRetry);
-                  setIsOpen(true);
-                  console.log("✅ Successfully added to cart on retry with new cart!");
-              } else {
-                  throw new CartInitializationError("Failed to reinitialize cart for retry.");
-              }
+            const freshCart = await initializeCart();
+            if (freshCart) {
+              const updatedCartOnRetry = await shopifyAddToCart(
+                freshCart.id,
+                variantId,
+                quantity
+              );
+              setCart(updatedCartOnRetry);
+              setIsOpen(true);
+              console.log(
+                "✅ Successfully added to cart on retry with new cart!"
+              );
+              return;
+            }
           } catch (retryError) {
-              console.error("❌ Retry to add to cart also failed:", retryError);
-              // Gooi de uiteindelijke fout door naar de aanroeper (EnhancedProductCard)
-              throw new CartModificationError(`Failed to add item to cart after retry: ${retryError instanceof Error ? retryError.message : String(retryError)}`);
+            console.error("❌ Retry to add to cart also failed:", retryError);
           }
-      } else {
-          // Gooi originele, niet-cartId gerelateerde fouten direct door
-          throw new CartModificationError(`Failed to add item to cart: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        // If retry fails or error is different, re-throw or handle as appropriate
+        // For now, we'll let the error be caught by a higher-level handler or shown in UI
+        throw new CartModificationError(
+          `Failed to add item to cart: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      } finally {
+        setIsLoading(false);
       }
-    } finally {
-      setIsLoading(false); // Zet loading altijd uit
-    }
-  }, [cart, initializeCart]); // Afhankelijkheden voor useCallback
+    },
+    [cart, initializeCart]
+  );
 
-  const removeItem = useCallback(async (lineId: string) => {
-    if (!cart) {
-      console.warn("🚫 Cannot remove item: No cart available.");
-      return;
-    }
+  const removeItem = useCallback(
+    async (lineId: string) => {
+      if (!cart) {
+        console.warn("🚫 Cannot remove item: No cart available.");
+        return;
+      }
 
-    setIsLoading(true);
-    try {
-      console.log(`🗑️ Removing line ${lineId} from cart ${cart.id}`);
-      const updatedCart = await removeFromCart(cart.id, lineId);
-      setCart(updatedCart);
-      console.log("✅ Item successfully removed.");
-    } catch (error) {
-      console.error(`❌ Error removing line ${lineId} from cart:`, error instanceof Error ? error.message : String(error));
-      throw new CartModificationError(`Failed to remove item from cart: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [cart]);
+      setIsLoading(true);
+      try {
+        console.log(`🗑️ Removing line ${lineId} from cart ${cart.id}`);
+        const updatedCart = await removeFromCart(cart.id, lineId);
+        setCart(updatedCart);
+        console.log("✅ Item successfully removed.");
+      } catch (error) {
+        console.error(
+          `❌ Error removing line ${lineId} from cart:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        throw new CartModificationError(
+          `Failed to remove item from cart: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [cart]
+  );
 
-  const updateQuantity = useCallback(async (lineId: string, quantity: number) => {
-    if (!cart) {
-      console.warn("🚫 Cannot update quantity: No cart available.");
-      return;
-    }
+  const updateQuantity = useCallback(
+    async (lineId: string, quantity: number) => {
+      if (!cart) {
+        console.warn("🚫 Cannot update quantity: No cart available.");
+        return;
+      }
+      if (quantity <= 0) {
+        // Shopify typically handles removal for 0 quantity, but good to guard
+        await removeItem(lineId);
+        return;
+      }
 
-    setIsLoading(true);
-    try {
-      console.log(`🔄 Updating line ${lineId} in cart ${cart.id} to quantity ${quantity}`);
-      const updatedCart = await updateCartLine(cart.id, lineId, quantity);
-      setCart(updatedCart);
-      console.log("✅ Cart quantity successfully updated.");
-    } catch (error) {
-      console.error(`❌ Error updating quantity for line ${lineId} in cart:`, error instanceof Error ? error.message : String(error));
-      throw new CartModificationError(`Failed to update item quantity in cart: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [cart]);
+      setIsLoading(true);
+      try {
+        console.log(
+          `🔄 Updating line ${lineId} in cart ${cart.id} to quantity ${quantity}`
+        );
+        const updatedCart = await updateCartLine(cart.id, lineId, quantity);
+        setCart(updatedCart);
+        console.log("✅ Cart quantity successfully updated.");
+      } catch (error) {
+        console.error(
+          `❌ Error updating quantity for line ${lineId} in cart:`,
+          error instanceof Error ? error.message : String(error)
+        );
+        throw new CartModificationError(
+          `Failed to update item quantity in cart: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [cart, removeItem] // Added removeItem dependency
+  );
 
-  const cartCount =
-    cart?.lines.edges.reduce((total, edge) => total + edge.node.quantity, 0) ||
-    0;
+  const cartCount = items.reduce(
+    (total: number, item: CartItem) => total + item.quantity,
+    0
+  );
 
   const openCart = useCallback(() => setIsOpen(true), []);
   const closeCart = useCallback(() => setIsOpen(false), []);
@@ -216,6 +337,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <CartContext.Provider
       value={{
         cart,
+        items,
         isLoading,
         addItem,
         removeItem,
