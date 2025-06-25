@@ -32,7 +32,7 @@ export interface ShopifyProductVariantNode {
     name: string
     value: string
   }>
-  image?: ShopifyImageNode | null // ✅ Variant can have one specific image
+  image?: ShopifyImageNode | null
 }
 
 export interface ShopifyProduct {
@@ -44,7 +44,6 @@ export interface ShopifyProduct {
   productType: string
   tags: string[]
   images: {
-    // Product has a collection of images
     edges: Array<{ node: ShopifyImageNode }>
   }
   variants: {
@@ -74,13 +73,17 @@ export interface ShopifyCartLineMerchandiseProduct {
   handle: string
   vendor: string
   tags: string[]
+  images?: {
+    // ✅ Added images for the parent product in cart line
+    edges: Array<{ node: ShopifyImageNode }>
+  } | null
 }
 
 export interface ShopifyCartLineMerchandise {
   id: string // ProductVariant ID
   title: string // ProductVariant title
   product: ShopifyCartLineMerchandiseProduct
-  image?: ShopifyImageNode | null // ✅ Variant image (singular)
+  image?: ShopifyImageNode | null // Specific variant image
   price: ShopifyMoneyV2
   compareAtPrice?: ShopifyMoneyV2 | null
   selectedOptions: Array<{
@@ -92,7 +95,6 @@ export interface ShopifyCartLineMerchandise {
 }
 
 export interface ShopifyCartLineNode {
-  // Renamed from ShopifyCartLine for clarity
   id: string
   quantity: number
   cost: {
@@ -120,8 +122,9 @@ export interface ShopifyCart {
   updatedAt: string
 }
 
-// --- Response Types for shopifyFetch (simplified for brevity, expand as needed) ---
-interface ShopifyProductsResponse {
+// --- Response Types for shopifyFetch ---
+interface ShopifyProductsResponseData {
+  // Renamed for clarity
   products: {
     edges: Array<{ node: ShopifyProduct }>
     pageInfo: {
@@ -131,36 +134,42 @@ interface ShopifyProductsResponse {
   }
 }
 
-interface ShopifySingleProductResponse {
+interface ShopifySingleProductResponseData {
+  // Renamed for clarity
   product: ShopifyProduct | null
 }
 
-interface ShopifyCartCreateResponse {
+interface ShopifyCartCreateResponseData {
+  // Renamed for clarity
   cartCreate: {
     cart: { id: string }
     userErrors: Array<{ field: string; message: string }>
   }
 }
 
-interface ShopifyCartResponse {
+interface ShopifyCartResponseData {
+  // Renamed for clarity
   cart: ShopifyCart | null
 }
 
-interface ShopifyCartLinesAddResponse {
+interface ShopifyCartLinesAddResponseData {
+  // Renamed for clarity
   cartLinesAdd: {
     cart: ShopifyCart
     userErrors: Array<{ field: string; message: string }>
   }
 }
 
-interface ShopifyCartLinesRemoveResponse {
+interface ShopifyCartLinesRemoveResponseData {
+  // Renamed for clarity
   cartLinesRemove: {
     cart: ShopifyCart
     userErrors: Array<{ field: string; message: string }>
   }
 }
 
-interface ShopifyCartLinesUpdateResponse {
+interface ShopifyCartLinesUpdateResponseData {
+  // Renamed for clarity
   cartLinesUpdate: {
     cart: ShopifyCart
     userErrors: Array<{ field: string; message: string }>
@@ -177,72 +186,26 @@ const PRODUCT_FRAGMENT = `
     vendor
     productType
     tags
-    images(first: 10) {
-      edges {
-        node {
-          id
-          url
-          altText
-          width
-          height
-        }
-      }
-    }
+    images(first: 10) { edges { node { id url altText width height } } }
     variants(first: 10) {
       edges {
         node {
           id
           title
-          price {
-            amount
-            currencyCode
-          }
-          compareAtPrice {
-            amount
-            currencyCode
-          }
+          price { amount currencyCode }
+          compareAtPrice { amount currencyCode }
           availableForSale
           quantityAvailable
-          selectedOptions {
-            name
-            value
-          }
-          image { # ✅ Fetch the single image for the variant
-            id
-            url
-            altText
-            width
-            height
-          }
+          selectedOptions { name value }
+          image { id url altText width height }
         }
       }
     }
-    priceRange {
-      minVariantPrice {
-        amount
-        currencyCode
-      }
-      maxVariantPrice {
-        amount
-        currencyCode
-      }
-    }
-    compareAtPriceRange {
-      minVariantPrice {
-        amount
-        currencyCode
-      }
-      maxVariantPrice {
-        amount
-        currencyCode
-      }
-    }
+    priceRange { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
+    compareAtPriceRange { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
     availableForSale
     totalInventory
-    seo {
-      title
-      description
-    }
+    seo { title description }
     createdAt
     updatedAt
   }
@@ -258,50 +221,31 @@ const CART_FRAGMENT = `
         node {
           id
           quantity
-          cost {
-            totalAmount {
-              amount
-              currencyCode
-            }
-            subtotalAmount {
-              amount
-              currencyCode
-            }
-            compareAtAmountPerQuantity {
-              amount
-              currencyCode
-            }
-          }
+          cost { totalAmount { amount currencyCode } subtotalAmount { amount currencyCode } compareAtAmountPerQuantity { amount currencyCode } }
           merchandise {
             ... on ProductVariant {
               id
               title
-              product {
+              product { # Access parent product
                 id
                 title
                 handle
                 vendor
                 tags
+                images(first: 1) { # ✅ Fetch first image of the parent product
+                  edges { node { id url altText width height } }
+                }
               }
-              image { # ✅ FIXED: Query singular 'image' for ProductVariant
+              image { # Specific variant image
                 id
                 url
                 altText
                 width
                 height
               }
-              price {
-                amount
-                currencyCode
-              }
-              compareAtPrice {
-                amount
-                currencyCode
-              }
-              selectedOptions {
-                name
-                value
-              }
+              price { amount currencyCode }
+              compareAtPrice { amount currencyCode }
+              selectedOptions { name value }
               availableForSale
               quantityAvailable
             }
@@ -309,37 +253,27 @@ const CART_FRAGMENT = `
         }
       }
     }
-    cost {
-      totalAmount {
-        amount
-        currencyCode
-      }
-      subtotalAmount {
-        amount
-        currencyCode
-      }
-      totalTaxAmount {
-        amount
-        currencyCode
-      }
-      totalDutyAmount {
-        amount
-        currencyCode
-      }
-    }
+    cost { totalAmount { amount currencyCode } subtotalAmount { amount currencyCode } totalTaxAmount { amount currencyCode } totalDutyAmount { amount currencyCode } }
     createdAt
     updatedAt
   }
 `
 
 // --- Shopify Fetch Function ---
+// Adding a more specific type for the fetch response to help with type inference
+interface ShopifyFetchResponse<T> {
+  data: T
+  errors?: Array<{ message: string; locations?: any[]; path?: string[]; extensions?: any }>
+}
+
 async function shopifyFetch<T>({
   query,
   variables,
 }: {
   query: string
   variables?: Record<string, any>
-}): Promise<{ data: T; errors?: Array<{ message: string }> }> {
+}): Promise<ShopifyFetchResponse<T>> {
+  // Return the full response object
   try {
     const result = await fetch(endpoint, {
       method: "POST",
@@ -348,7 +282,7 @@ async function shopifyFetch<T>({
         "X-Shopify-Storefront-Access-Token": storefrontAccessToken,
       },
       body: JSON.stringify({ query, variables }),
-      next: { revalidate: 60 }, // Cache for 1 minute
+      next: { revalidate: 60 },
     })
 
     if (!result.ok) {
@@ -357,27 +291,31 @@ async function shopifyFetch<T>({
       throw new Error(`HTTP error! status: ${result.status}, body: ${errorBody}`)
     }
 
-    const body = (await result.json()) as { data: T; errors?: Array<{ message: string }> }
+    const body: ShopifyFetchResponse<T> = await result.json()
 
     if (body.errors && body.errors.length > 0) {
       console.error("GraphQL errors:", JSON.stringify(body.errors, null, 2))
+      // It's often useful to still return data if available, even with errors.
+      // The calling function can decide how to handle partial data + errors.
+      // However, for critical errors, throwing might be appropriate.
+      // For now, we'll throw if there are errors, as this has been the pattern.
       throw new Error(`GraphQL error: ${body.errors.map((e) => e.message).join(", ") || "Unknown error"}`)
     }
-    if (!body.data && !(body.errors && body.errors.length > 0)) {
-      // This case can happen if there are no GraphQL errors but data is still null/undefined
+
+    // It's possible to have no data and no errors (e.g. for a mutation that returns nothing on success)
+    // but for queries, data should generally be present.
+    if (body.data === undefined && !(body.errors && body.errors.length > 0)) {
       console.warn(
-        "Shopify fetch returned no data and no errors. Query:",
+        "Shopify fetch returned undefined data and no errors. Query:",
         query,
         "Variables:",
         variables,
         "Response body:",
-        body,
+        JSON.stringify(body, null, 2),
       )
-      // Potentially throw an error or return a specific structure indicating no data
-      // For now, returning as is, but this might need specific handling by callers.
     }
 
-    return { data: body.data, errors: body.errors }
+    return body // Return the full body which includes data and potentially errors
   } catch (error) {
     if (error instanceof Error) {
       console.error("Shopify fetch error:", error.message, error.stack)
@@ -402,7 +340,7 @@ export async function getAllProducts(): Promise<ShopifyProduct[]> {
 
   while (hasNextPage && pageCount < maxPages) {
     pageCount++
-    const query = `
+    const queryStr = `
       query getProducts($first: Int!, $after: String) {
         products(first: $first, after: $after) {
           edges { node { ...ProductFragment } }
@@ -412,21 +350,25 @@ export async function getAllProducts(): Promise<ShopifyProduct[]> {
       ${PRODUCT_FRAGMENT}
     `
     try {
-      const response: { data: ShopifyProductsResponse; errors?: Array<{ message: string }> } = await shopifyFetch<ShopifyProductsResponse>({
-        query,
+      // Explicitly type the expected data structure for shopifyFetch
+      const response: ShopifyFetchResponse<ShopifyProductsResponseData> = await shopifyFetch<ShopifyProductsResponseData>({
+        // ✅ Use specific data type
+        query: queryStr,
         variables: { first: 250, after: cursor },
       })
 
+      // ✅ Check if response.data and response.data.products exist
       if (!response.data || !response.data.products) {
-        console.warn(`No data or products returned for page ${pageCount}. Response:`, response)
+        console.warn(`No data or products returned for page ${pageCount}. Response:`, JSON.stringify(response, null, 2))
         hasNextPage = false
         continue
       }
 
-      const products = response.data.products.edges.map((edge: { node: ShopifyProduct }) => edge.node)
+      const productsData = response.data.products
+      const products = productsData.edges.map((edge: { node: ShopifyProduct }) => edge.node) // ✅ Type edge
       allProducts = [...allProducts, ...products]
-      hasNextPage = response.data.products.pageInfo.hasNextPage
-      cursor = response.data.products.pageInfo.endCursor
+      hasNextPage = productsData.pageInfo.hasNextPage
+      cursor = productsData.pageInfo.endCursor
       console.log(`✅ Page ${pageCount}: ${products.length} products (Total: ${allProducts.length})`)
       if (!hasNextPage) console.log(`🎉 Finished! Total products fetched: ${allProducts.length}`)
     } catch (error) {
@@ -439,28 +381,28 @@ export async function getAllProducts(): Promise<ShopifyProduct[]> {
 }
 
 export async function getProducts(first = 100): Promise<ShopifyProduct[]> {
-  const query = `
+  const queryStr = `
     query getLimitedProducts($first: Int!) {
       products(first: $first) { edges { node { ...ProductFragment } } }
     }
     ${PRODUCT_FRAGMENT}
   `
-  const response = await shopifyFetch<ShopifyProductsResponse>({ query, variables: { first } })
+  const response = await shopifyFetch<ShopifyProductsResponseData>({ query: queryStr, variables: { first } })
   if (!response.data || !response.data.products) {
     console.warn("No data or products returned for getProducts.")
     return []
   }
-  return response.data.products.edges.map((edge) => edge.node)
+  return response.data.products.edges.map((edge: { node: ShopifyProduct }) => edge.node) // ✅ Type edge
 }
 
 export async function getProduct(handle: string): Promise<ShopifyProduct | null> {
-  const query = `
+  const queryStr = `
     query getSingleProduct($handle: String!) {
       product(handle: $handle) { ...ProductFragment }
     }
     ${PRODUCT_FRAGMENT}
   `
-  const response = await shopifyFetch<ShopifySingleProductResponse>({ query, variables: { handle } })
+  const response = await shopifyFetch<ShopifySingleProductResponseData>({ query: queryStr, variables: { handle } })
   if (!response.data) {
     console.warn(`No data returned for getProduct with handle: ${handle}`)
     return null
@@ -475,152 +417,143 @@ export async function searchProducts(searchTerm: string, first = 100): Promise<S
     return []
   }
   const cleanTerm = searchTerm.trim().toLowerCase()
-
   const shopifySearchQuery = `title:*${cleanTerm}* OR tag:*${cleanTerm}* OR product_type:*${cleanTerm}* OR vendor:*${cleanTerm}*`
-  // For more complex scenarios, you might iterate through different query strategies as in your attached file.
-  // For this version, sticking to a common combined query.
 
-  const query = `
+  const queryStr = `
     query searchStoreProducts($query: String!, $first: Int!) {
       products(first: $first, query: $query) { edges { node { ...ProductFragment } } }
     }
     ${PRODUCT_FRAGMENT}
   `
   try {
-    const response = await shopifyFetch<ShopifyProductsResponse>({
-      query,
+    const response = await shopifyFetch<ShopifyProductsResponseData>({
+      query: queryStr,
       variables: { query: shopifySearchQuery, first },
     })
     if (!response.data || !response.data.products) {
       console.warn(`No data or products returned for search term: ${searchTerm}`)
       return []
     }
-    const results = response.data.products.edges.map((edge) => edge.node)
+    const results = response.data.products.edges.map((edge: { node: ShopifyProduct }) => edge.node) // ✅ Type edge
     console.log(`✅ Found ${results.length} products with query: "${shopifySearchQuery}"`)
     return results
   } catch (error) {
     console.error(`Search failed for term "${searchTerm}" with query "${shopifySearchQuery}":`, error)
-    // Fallback or more advanced search strategies could be added here if needed.
-    // For now, return empty on error.
     return []
   }
 }
 
 // --- Cart Functions ---
+// Helper to extract data and handle user errors for cart mutations
+function handleCartMutationResponse<
+  T extends { cart: ShopifyCart; userErrors: Array<{ field: string; message: string }> },
+>(
+  response: ShopifyFetchResponse<{ [key: string]: T }>, // Expects a single key like 'cartCreate' or 'cartLinesAdd'
+  mutationName: string,
+): ShopifyCart {
+  const mutationResult = response.data?.[mutationName]
+
+  if (!mutationResult) {
+    console.error(
+      `Failed ${mutationName}, no data returned from Shopify. Full response:`,
+      JSON.stringify(response, null, 2),
+    )
+    throw new Error(`Failed ${mutationName}: No data returned from Shopify.`)
+  }
+  if (mutationResult.userErrors.length > 0) {
+    throw new Error(mutationResult.userErrors.map((e) => e.message).join(", "))
+  }
+  if (!mutationResult.cart) {
+    console.error(
+      `Failed ${mutationName}, cart data is missing after operation. Result:`,
+      JSON.stringify(mutationResult, null, 2),
+    )
+    throw new Error(`Failed ${mutationName}: Cart data is missing after operation.`)
+  }
+  return mutationResult.cart
+}
+
 export async function createCart(): Promise<string> {
-  const query = `
+  const queryStr = `
     mutation cartCreate {
       cartCreate { cart { id } userErrors { field message } }
     }`
-  const response = await shopifyFetch<ShopifyCartCreateResponse>({ query })
-  if (!response.data || !response.data.cartCreate) {
-    console.error("Failed to create cart, no data returned from Shopify.", response)
-    throw new Error("Failed to create cart: No data returned from Shopify.")
+  const response = await shopifyFetch<ShopifyCartCreateResponseData>({ query: queryStr })
+
+  const cartCreateData = response.data?.cartCreate
+  if (!cartCreateData) {
+    console.error("Failed to create cart, no cartCreate data returned from Shopify.", JSON.stringify(response, null, 2))
+    throw new Error("Failed to create cart: No cartCreate data returned from Shopify.")
   }
-  if (response.data.cartCreate.userErrors.length > 0) {
-    throw new Error(response.data.cartCreate.userErrors.map((e) => e.message).join(", "))
+  if (cartCreateData.userErrors.length > 0) {
+    throw new Error(cartCreateData.userErrors.map((e) => e.message).join(", "))
   }
-  if (!response.data.cartCreate.cart || !response.data.cartCreate.cart.id) {
-    console.error("Failed to create cart, cart ID is missing.", response.data.cartCreate)
+  if (!cartCreateData.cart || !cartCreateData.cart.id) {
+    console.error("Failed to create cart, cart ID is missing.", JSON.stringify(cartCreateData, null, 2))
     throw new Error("Failed to create cart: Cart ID is missing.")
   }
-  return response.data.cartCreate.cart.id
+  return cartCreateData.cart.id
 }
 
 export async function getCart(cartId: string): Promise<ShopifyCart | null> {
-  const query = `
+  const queryStr = `
     query getStoreCart($cartId: ID!) {
       cart(id: $cartId) { ...CartFragment }
     }
     ${CART_FRAGMENT}
   `
   try {
-    const response = await shopifyFetch<ShopifyCartResponse>({ query, variables: { cartId } })
+    const response = await shopifyFetch<ShopifyCartResponseData>({ query: queryStr, variables: { cartId } })
     if (!response.data) {
-      // This can happen if the cart ID is invalid or expired.
-      // Returning null allows the CartContext to attempt creating a new cart.
       console.warn(`No data returned for getCart with ID: ${cartId}. Cart might be invalid or not found.`)
       return null
     }
     return response.data.cart
   } catch (error) {
-    // Catching errors here (e.g., network issues, or GraphQL errors not caught by shopifyFetch's primary error check)
     console.error(`Error fetching cart with ID ${cartId}:`, error)
-    return null // Indicate failure to fetch the cart
+    return null
   }
 }
 
 export async function addToCart(cartId: string, variantId: string, quantity: number): Promise<ShopifyCart> {
-  const query = `
+  const queryStr = `
     mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
       cartLinesAdd(cartId: $cartId, lines: $lines) { cart { ...CartFragment } userErrors { field message } }
     }
     ${CART_FRAGMENT}
   `
-  const response = await shopifyFetch<ShopifyCartLinesAddResponse>({
-    query,
+  const response = await shopifyFetch<{ cartLinesAdd: ShopifyCartLinesAddResponseData["cartLinesAdd"] }>({
+    // More specific type
+    query: queryStr,
     variables: { cartId, lines: [{ merchandiseId: variantId, quantity }] },
   })
-  if (!response.data || !response.data.cartLinesAdd) {
-    console.error("Failed to add to cart, no data returned from Shopify.", response)
-    throw new Error("Failed to add to cart: No data returned from Shopify.")
-  }
-  if (response.data.cartLinesAdd.userErrors.length > 0) {
-    throw new Error(response.data.cartLinesAdd.userErrors.map((e) => e.message).join(", "))
-  }
-  if (!response.data.cartLinesAdd.cart) {
-    console.error("Failed to add to cart, cart data is missing after operation.", response.data.cartLinesAdd)
-    throw new Error("Failed to add to cart: Cart data is missing after operation.")
-  }
-  return response.data.cartLinesAdd.cart
+  return handleCartMutationResponse(response, "cartLinesAdd")
 }
 
 export async function removeFromCart(cartId: string, lineId: string): Promise<ShopifyCart> {
-  const query = `
+  const queryStr = `
     mutation cartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
       cartLinesRemove(cartId: $cartId, lineIds: $lineIds) { cart { ...CartFragment } userErrors { field message } }
     }
     ${CART_FRAGMENT}
   `
-  const response = await shopifyFetch<ShopifyCartLinesRemoveResponse>({
-    query,
+  const response = await shopifyFetch<{ cartLinesRemove: ShopifyCartLinesRemoveResponseData["cartLinesRemove"] }>({
+    query: queryStr,
     variables: { cartId, lineIds: [lineId] },
   })
-  if (!response.data || !response.data.cartLinesRemove) {
-    console.error("Failed to remove from cart, no data returned from Shopify.", response)
-    throw new Error("Failed to remove from cart: No data returned from Shopify.")
-  }
-  if (response.data.cartLinesRemove.userErrors.length > 0) {
-    throw new Error(response.data.cartLinesRemove.userErrors.map((e) => e.message).join(", "))
-  }
-  if (!response.data.cartLinesRemove.cart) {
-    console.error("Failed to remove from cart, cart data is missing after operation.", response.data.cartLinesRemove)
-    throw new Error("Failed to remove from cart: Cart data is missing after operation.")
-  }
-  return response.data.cartLinesRemove.cart
+  return handleCartMutationResponse(response, "cartLinesRemove")
 }
 
 export async function updateCartLine(cartId: string, lineId: string, quantity: number): Promise<ShopifyCart> {
-  const query = `
+  const queryStr = `
     mutation cartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
       cartLinesUpdate(cartId: $cartId, lines: $lines) { cart { ...CartFragment } userErrors { field message } }
     }
     ${CART_FRAGMENT}
   `
-  const response = await shopifyFetch<ShopifyCartLinesUpdateResponse>({
-    query,
+  const response = await shopifyFetch<{ cartLinesUpdate: ShopifyCartLinesUpdateResponseData["cartLinesUpdate"] }>({
+    query: queryStr,
     variables: { cartId, lines: [{ id: lineId, quantity }] },
   })
-  if (!response.data || !response.data.cartLinesUpdate) {
-    console.error("Failed to update cart line, no data returned from Shopify.", response)
-    throw new Error("Failed to update cart line: No data returned from Shopify.")
-  }
-  if (response.data.cartLinesUpdate.userErrors.length > 0) {
-    throw new Error(response.data.cartLinesUpdate.userErrors.map((e) => e.message).join(", "))
-  }
-  if (!response.data.cartLinesUpdate.cart) {
-    console.error("Failed to update cart line, cart data is missing after operation.", response.data.cartLinesUpdate)
-    throw new Error("Failed to update cart line: Cart data is missing after operation.")
-  }
-  return response.data.cartLinesUpdate.cart
+  return handleCartMutationResponse(response, "cartLinesUpdate")
 }
