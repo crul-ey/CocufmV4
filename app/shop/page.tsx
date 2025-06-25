@@ -30,7 +30,7 @@ function ProductGridWrapper() {
 
 async function ProductGridContent() {
   // Fetch more products for better sorting demonstration
-  const products = await getProducts(50);
+  const products = await getProducts(250);
 
   // Ensure each product has proper dates for sorting
   const productsWithDates = products.map((product: any, index: number) => ({
