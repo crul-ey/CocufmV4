@@ -169,10 +169,10 @@ const ProductFragment = /* GraphQL */ `
   }
 `;
 
-export async function getProducts(first = 100): Promise<ShopifyProduct[]> {
+export async function getProductsByTag(tag: string, first = 100): Promise<ShopifyProduct[]> {
   const query = /* GraphQL */ `
-    query getProducts($first: Int!) {
-      products(first: $first) {
+    query getProducts($first: Int!, $query: String!) {
+      products(first: $first, query: $query) {
         edges {
           node {
             ...ProductFields
@@ -182,10 +182,9 @@ export async function getProducts(first = 100): Promise<ShopifyProduct[]> {
     }
     ${ProductFragment}
   `;
-  // Gebruik cache revalidatie voor productqueries
   const data = await shopifyFetch<{
     products: { edges: Array<{ node: ShopifyProduct }> };
-  }>(query, { first }, 3600); // Revalidate elke uur
+  }>(query, { first, query: `tag:${tag}` }, 3600);
   return data.products.edges.map((e) => e.node);
 }
 
@@ -209,7 +208,7 @@ export async function getProduct(
 
 export async function searchProducts(
   queryText: string,
-  first = 100
+  first = 250
 ): Promise<ShopifyProduct[]> {
   const searchQuery = /* GraphQL */ `
     query searchProducts($query: String!, $first: Int!) {
