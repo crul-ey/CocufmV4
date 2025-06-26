@@ -1,175 +1,191 @@
-"use client"
+// In je hooks/use-toast.ts bestand
 
-import * as React from "react"
+"use client";
+
+import * as React from "react";
+
+// --- VERBETERING 1: Type-veilige Actions definiëren ---
+const ACTION_TYPES = {
+  ADD_TOAST: "ADD_TOAST",
+  UPDATE_TOAST: "UPDATE_TOAST",
+  DISMISS_TOAST: "DISMISS_TOAST",
+  REMOVE_TOAST: "REMOVE_TOAST",
+} as const;
+
+type Action =
+  | { type: typeof ACTION_TYPES.ADD_TOAST; toast: Toast }
+  | { type: typeof ACTION_TYPES.UPDATE_TOAST; toast: Partial<Toast> & { id: string } }
+  | { type: typeof ACTION_TYPES.DISMISS_TOAST; toastId?: Toast["id"] }
+  | { type: typeof ACTION_TYPES.REMOVE_TOAST; toastId?: Toast["id"] };
+
+// --- Einde Verbetering 1 ---
 
 type ToastProps = {
-  title?: string
-  description?: string
-  variant?: "default" | "destructive" | "success"
-  duration?: number // 🔥 NIEUW: Duration support toegevoegd
-}
+  title?: React.ReactNode; // ReactNode toestaat voor meer flexibiliteit
+  description?: React.ReactNode;
+  variant?: "default" | "destructive" | "success";
+  duration?: number;
+};
 
-type ToastActionElement = React.ReactElement
+type ToastActionElement = React.ReactElement;
 
 type Toast = ToastProps & {
-  id: string
-  action?: ToastActionElement
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-}
+  id: string;
+  action?: ToastActionElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+};
 
-const TOAST_LIMIT = 3 // 🎯 Verhoogd naar 3 voor betere UX
-const TOAST_REMOVE_DELAY = 5000 // 🎯 Standaard 5 seconden
+const TOAST_LIMIT = 3;
+const TOAST_REMOVE_DELAY = 5000;
 
 type State = {
-  toasts: Toast[]
-}
+  toasts: Toast[];
+};
 
-const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 const addToRemoveQueue = (toastId: string, customDuration?: number) => {
   if (toastTimeouts.has(toastId)) {
-    return
+    // Verwijder bestaande timer als die er is, voor de zekerheid
+    clearTimeout(toastTimeouts.get(toastId));
   }
 
-  // 🎯 PREMIUM: Gebruik custom duration of fallback naar default
-  const delay = customDuration || TOAST_REMOVE_DELAY
+  const delay = customDuration || TOAST_REMOVE_DELAY;
 
   const timeout = setTimeout(() => {
-    toastTimeouts.delete(toastId)
+    toastTimeouts.delete(toastId);
     dispatch({
-      type: "REMOVE_TOAST",
+      type: ACTION_TYPES.REMOVE_TOAST,
       toastId: toastId,
-    })
-  }, delay)
+    });
+  }, delay);
 
-  toastTimeouts.set(toastId, timeout)
-}
+  toastTimeouts.set(toastId, timeout);
+};
 
-export const reducer = (state: State, action: any): State => {
+export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case "ADD_TOAST":
+    case ACTION_TYPES.ADD_TOAST:
       return {
         ...state,
         toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
-      }
+      };
 
-    case "UPDATE_TOAST":
+    case ACTION_TYPES.UPDATE_TOAST:
       return {
         ...state,
-        toasts: state.toasts.map((t) => (t.id === action.toast.id ? { ...t, ...action.toast } : t)),
-      }
+        toasts: state.toasts.map((t) =>
+          t.id === action.toast.id ? { ...t, ...action.toast } : t
+        ),
+      };
 
-    case "DISMISS_TOAST": {
-      const { toastId } = action
+    case ACTION_TYPES.DISMISS_TOAST: {
+      const { toastId } = action;
 
+      // --- VERBETERING 2: Robuuster Timeout Beheer ---
+      // Bij het handmatig dismessen, start de remove timer.
+      // Dit zorgt voor een consistente ervaring.
       if (toastId) {
-        addToRemoveQueue(toastId)
+        addToRemoveQueue(toastId, 500); // Korte delay voor de animatie
       } else {
         state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
-        })
+          addToRemoveQueue(toast.id, 500);
+        });
       }
 
       return {
         ...state,
         toasts: state.toasts.map((t) =>
           t.id === toastId || toastId === undefined
-            ? {
-                ...t,
-                open: false,
-              }
-            : t,
+            ? { ...t, open: false }
+            // eslint-disable-next-line no-mixed-spaces-and-tabs
+            : t
         ),
-      }
+      };
     }
-    case "REMOVE_TOAST":
+    case ACTION_TYPES.REMOVE_TOAST:
       if (action.toastId === undefined) {
         return {
           ...state,
           toasts: [],
-        }
+        };
       }
       return {
         ...state,
         toasts: state.toasts.filter((t) => t.id !== action.toastId),
-      }
+      };
     default:
-      return state // 🔧 FIX: Default case toegevoegd voor TypeScript
+      return state;
   }
-}
+};
 
-const listeners: Array<(state: State) => void> = []
+const listeners: Array<(state: State) => void> = [];
 
-let memoryState: State = { toasts: [] }
+let memoryState: State = { toasts: [] };
 
-function dispatch(action: any) {
-  memoryState = reducer(memoryState, action)
+function dispatch(action: Action) { // Nu met het correcte Action type
+  memoryState = reducer(memoryState, action);
   listeners.forEach((listener) => {
-    listener(memoryState)
-  })
+    listener(memoryState);
+  });
 }
 
-// 🎯 PREMIUM: Uitgebreide Toast type met alle properties
-type Toast2 = Omit<ToastProps, "id"> & {
-  duration?: number
-}
+type ToastInput = Omit<ToastProps, "id"> & {
+    duration?: number;
+};
 
-function toast({ duration, ...props }: Toast2) {
-  const id = Math.random().toString(36).substr(2, 9)
+function toast(props: ToastInput) {
+  const id = crypto.randomUUID(); // Modernere manier voor unieke ID
 
-  const update = (props: ToastProps) =>
+  const update = (props: Partial<ToastInput>) =>
     dispatch({
-      type: "UPDATE_TOAST",
+      type: ACTION_TYPES.UPDATE_TOAST,
       toast: { ...props, id },
-    })
+    });
 
-  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+  const dismiss = () => dispatch({ type: ACTION_TYPES.DISMISS_TOAST, toastId: id });
 
   dispatch({
-    type: "ADD_TOAST",
+    type: ACTION_TYPES.ADD_TOAST,
     toast: {
       ...props,
       id,
       open: true,
       onOpenChange: (open: boolean) => {
-        if (!open) dismiss()
+        if (!open) dismiss();
       },
     },
-  })
+  });
 
-  // 🎯 PREMIUM: Auto-dismiss met custom duration
-  if (duration !== undefined) {
-    addToRemoveQueue(id, duration)
-  } else {
-    addToRemoveQueue(id)
-  }
+  // Auto-dismiss met custom of default duration
+  addToRemoveQueue(id, props.duration);
 
   return {
     id: id,
     dismiss,
     update,
-  }
+  };
 }
 
 function useToast() {
-  const [state, setState] = React.useState<State>(memoryState)
+  const [state, setState] = React.useState<State>(memoryState);
 
   React.useEffect(() => {
-    listeners.push(setState)
+    listeners.push(setState);
     return () => {
-      const index = listeners.indexOf(setState)
+      const index = listeners.indexOf(setState);
       if (index > -1) {
-        listeners.splice(index, 1)
+        listeners.splice(index, 1);
       }
-    }
-  }, [state])
+    };
+  }, [state]);
 
   return {
     ...state,
     toast,
-    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
-  }
+    dismiss: (toastId?: string) => dispatch({ type: ACTION_TYPES.DISMISS_TOAST, toastId }),
+  };
 }
 
-export { useToast, toast }
+export { useToast, toast };

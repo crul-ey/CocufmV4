@@ -25,7 +25,7 @@ import {
 import {
   submitFeedback,
   type FeedbackFormState,
-} from "../app/actions/feedback-actions";
+} from "@/app/actions/feedback-actions";
 
 interface FeedbackModalProps {
   open: boolean;

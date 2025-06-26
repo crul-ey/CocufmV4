@@ -9,7 +9,8 @@ import { Toaster } from "@/components/ui/toaster";
 import ScrollToTop from "@/components/scroll-to-top";
 import StructuredData from "@/components/seo/structured-data";
 import CookieBanner from "@/components/cookie-banner";
-import { FeedbackTrigger } from "@/components/feedback-trigger"; // <-- IMPORT
+import { FeedbackTrigger } from "@/components/feedback-trigger";
+import FloatingCartButton from "@/components/floating-cart-button"; // <-- NIEUWE IMPORT
 
 const inter = Inter({
   subsets: ["latin"],
@@ -146,9 +147,18 @@ export default function RootLayout({
             <WishlistProvider>
               {children}
               <CookieBanner />
-              <ScrollToTop />
+              <div className="fixed bottom-6 right-6 z-50 flex flex-col-reverse items-end gap-3 pointer-events-none">
+                <div className="pointer-events-auto">
+                  <ScrollToTop />
+                </div>
+                <div className="pointer-events-auto">
+                  <FeedbackTrigger />
+                </div>
+                <div className="pointer-events-auto">
+                  <FloatingCartButton />
+                </div>
+              </div>
               <Toaster />
-              <FeedbackTrigger /> {/* <-- HIER TOEVOEGEN */}
             </WishlistProvider>
           </CartProvider>
         </ThemeProvider>

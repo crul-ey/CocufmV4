@@ -1,15 +1,27 @@
-import SearchPageClient from "./SearchPageClient";
+// app/search/page.tsx
 
-interface SearchPageProps {
-  searchParams: { q?: string };
-}
+import SearchPageClient from "./SearchPageClient"; // Pas het pad aan indien nodig
+import { searchProducts } from "@/lib/shopify"; // Functie om op de server te zoeken
 
-export const metadata = {
-  title: "Zoekresultaten - Cocúfum | Vind Je Perfecte Zomerproduct",
-  description:
-    "Zoek door onze collectie van premium zomerproducten. Vind strandhanddoeken, accessoires en lifestyle producten.",
-};
+// De pagina is een async Server Component
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
+  const query = typeof searchParams?.q === "string" ? searchParams.q : "";
 
-export default function SearchPage({ searchParams }: SearchPageProps) {
-  return <SearchPageClient searchParams={searchParams} />;
+  // Voer de eerste zoekopdracht uit op de server
+  const initialProducts = await searchProducts(query);
+
+  return (
+    <div>
+      <h1>Search Results</h1>
+      {/* Geef de initiële data en query door als props */}
+      <SearchPageClient
+        initialProducts={initialProducts}
+        initialQuery={query}
+      />
+    </div>
+  );
 }

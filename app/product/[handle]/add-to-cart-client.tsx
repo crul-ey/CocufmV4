@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import {
   Plus,
   Minus,
@@ -14,20 +14,24 @@ import {
   RotateCcw,
   Sparkles,
   Zap,
-  Star,
+  CheckCircle,
+  XCircle,
+  Info,
 } from "lucide-react";
-import type { ShopifyProduct, ShopifyVariant } from "@/lib/shopify";
+import type { ShopifyProduct, ShopifyProductVariantNode } from "@/lib/shopify"; // Gecorrigeerd type
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/contexts/cart-context";
 import { useWishlist } from "@/contexts/wishlist-context";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
-interface Props {
+interface AddToCartClientSideProps {
   product: ShopifyProduct;
+  selectedVariantProp?: ShopifyProductVariantNode;
+  onVariantChangeAction: (variantId: string) => void;
 }
 
-// 🌟 PREMIUM: Uitgebreide button states voor rijke feedback
 type ButtonState =
   | "idle"
   | "loading"
@@ -36,519 +40,505 @@ type ButtonState =
   | "adding"
   | "celebrating";
 
-export default function AddToCart({ product }: Props) {
+export default function AddToCartClientSide({
+  product,
+  selectedVariantProp,
+  onVariantChangeAction,
+}: AddToCartClientSideProps) {
   const { addItem } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
 
-  const [variantIndex, setVariantIndex] = useState(0);
+  const [internalSelectedVariant, setInternalSelectedVariant] = useState<
+    ShopifyProductVariantNode | undefined
+  >(
+    selectedVariantProp ||
+      product.variants.edges.find((v) => v.node.availableForSale)?.node ||
+      product.variants.edges[0]?.node
+  );
+
   const [qty, setQty] = useState(1);
   const [buttonState, setButtonState] = useState<ButtonState>("idle");
-  const [showPriceAnimation, setShowPriceAnimation] = useState(false);
   const [urgencyLevel, setUrgencyLevel] = useState<"low" | "medium" | "high">(
     "low"
   );
 
-  const selectedVariant = useMemo<ShopifyVariant | undefined>(
-    () => product.variants.edges[variantIndex]?.node,
-    [product.variants.edges, variantIndex]
-  );
+  useEffect(() => {
+    setInternalSelectedVariant(selectedVariantProp);
+  }, [selectedVariantProp]);
 
-  const isAvailable = selectedVariant?.availableForSale ?? false;
-  const stockQuantity = selectedVariant?.quantityAvailable ?? 0;
-  const totalPrice = selectedVariant
-    ? Number.parseFloat(selectedVariant.price.amount) * qty
-    : 0;
+  const isAvailable = internalSelectedVariant?.availableForSale ?? false;
+  const stockQuantity = internalSelectedVariant?.quantityAvailable ?? 0;
   const isWishlisted = isInWishlist(product.id);
 
-  // 🎯 PREMIUM: Urgency level bepaling
   useEffect(() => {
-    if (stockQuantity <= 2) setUrgencyLevel("high");
+    if (stockQuantity <= 0)
+      setUrgencyLevel("low"); // Geen urgency als uitverkocht
+    else if (stockQuantity <= 2) setUrgencyLevel("high");
     else if (stockQuantity <= 5) setUrgencyLevel("medium");
     else setUrgencyLevel("low");
   }, [stockQuantity]);
 
-  // 🎨 PREMIUM: Price animation trigger
-  useEffect(() => {
-    setShowPriceAnimation(true);
-    const timer = setTimeout(() => setShowPriceAnimation(false), 600);
-    return () => clearTimeout(timer);
-  }, [variantIndex, qty]);
-
-  // 🔄 PREMIUM: Reset quantity met smooth transition
   useEffect(() => {
     setQty(1);
-  }, [variantIndex]);
+  }, [internalSelectedVariant]);
 
-  const handleAdd = async () => {
-    if (!selectedVariant || !isAvailable) return;
-
-    setButtonState("adding");
-
-    // 🎭 PREMIUM: Micro-delay voor betere UX
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    setButtonState("loading");
-    try {
-      await addItem(selectedVariant.id, qty);
-      setButtonState("celebrating");
-
-      // 🎉 PREMIUM: Celebration sequence
-      setTimeout(() => setButtonState("success"), 500);
-
-      toast({
-        title: "🎉 Fantastisch!",
-        description: `${qty}× ${product.title} (${selectedVariant.title}) toegevoegd aan je winkelwagen!`,
-        duration: 4000,
-      });
-    } catch (error) {
-      setButtonState("error");
-      toast({
-        title: "😔 Oeps! Er ging iets mis.",
-        description: `Kon het product niet toevoegen. Probeer het opnieuw.`,
-        variant: "destructive",
-        duration: 5000,
-      });
-    } finally {
-      // 🔄 PREMIUM: Extended feedback cycle
-      setTimeout(() => setButtonState("idle"), 3000);
+  const handleLocalVariantSelect = (variantId: string) => {
+    const newVariant = product.variants.edges.find(
+      (edge) => edge.node.id === variantId
+    )?.node;
+    if (newVariant) {
+      setInternalSelectedVariant(newVariant);
+      onVariantChangeAction(variantId);
     }
   };
 
-  const formatPrice = (amount: string, currencyCode: string) => {
-    return new Intl.NumberFormat("nl-NL", {
-      style: "currency",
-      currency: currencyCode,
-    }).format(Number.parseFloat(amount));
+  const handleAdd = () => {
+    if (
+      !internalSelectedVariant ||
+      !isAvailable ||
+      !internalSelectedVariant.id
+    ) {
+      toast({
+        title: "Niet beschikbaar",
+        description:
+          "Dit product of deze variant is momenteel niet beschikbaar.",
+        variant: "destructive",
+      });
+      setButtonState("error");
+      setTimeout(() => setButtonState("idle"), 2000);
+      return;
+    }
+
+    setButtonState("adding");
+    startTransition(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200)); // Kortere UX delay
+      setButtonState("loading");
+      try {
+        await addItem(internalSelectedVariant.id, qty);
+        setButtonState("celebrating");
+        setTimeout(() => setButtonState("success"), 400);
+        toast({
+          title: "🎉 Toegevoegd!",
+          description: `${qty}× ${product.title} (${internalSelectedVariant.title}) in winkelwagen.`,
+          duration: 3000,
+        });
+      } catch (error) {
+        setButtonState("error");
+        toast({
+          title: "😔 Oeps!",
+          description: `Kon product niet toevoegen. Probeer opnieuw.`,
+          variant: "destructive",
+          duration: 4000,
+        });
+      } finally {
+        setTimeout(() => setButtonState("idle"), 2500);
+      }
+    });
   };
 
-  // 🎯 FIXED: Real wishlist integration with proper data mapping
   const handleWishlist = () => {
     if (isWishlisted) {
       removeFromWishlist(product.id);
-      toast({
-        title: "💔 Verwijderd uit verlanglijst",
-        description: "Product verwijderd uit je verlanglijst",
-        duration: 2000,
-      });
+      toast({ title: "💔 Verwijderd van verlanglijst", duration: 2000 });
     } else {
-      // Map ShopifyProduct to WishlistItem format
       const wishlistItem = {
         id: product.id,
         handle: product.handle,
         title: product.title,
         price: {
-          amount: product.priceRange.minVariantPrice.amount,
-          currencyCode: product.priceRange.minVariantPrice.currencyCode,
+          amount:
+            internalSelectedVariant?.price.amount ||
+            product.priceRange.minVariantPrice.amount,
+          currencyCode:
+            internalSelectedVariant?.price.currencyCode ||
+            product.priceRange.minVariantPrice.currencyCode,
         },
-        image: product.images.edges[0]?.node
-          ? {
-              url: product.images.edges[0].node.url,
-              altText: product.images.edges[0].node.altText || product.title,
-            }
-          : undefined,
+        image:
+          internalSelectedVariant?.image || product.images.edges[0]?.node
+            ? {
+                url: (internalSelectedVariant?.image ||
+                  product.images.edges[0]?.node)!.url,
+                altText:
+                  (internalSelectedVariant?.image ||
+                    product.images.edges[0]?.node)!.altText || product.title,
+              }
+            : undefined,
       };
-
       addToWishlist(wishlistItem);
-      toast({
-        title: "❤️ Toegevoegd aan verlanglijst",
-        description: "Je kunt het later terugvinden in je verlanglijst!",
-        duration: 2000,
-      });
+      toast({ title: "❤️ Toegevoegd aan verlanglijst", duration: 2000 });
     }
   };
 
-  // 🎯 FIXED: Enhanced share functionality
   const handleShare = async () => {
+    const shareData = {
+      title: product.title,
+      text: `Bekijk dit geweldige product: ${product.title}`,
+      url: window.location.href,
+    };
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: product.title,
-          text: `Bekijk dit geweldige product: ${product.title}`,
-          url: window.location.href,
-        });
+      if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare(shareData)
+      ) {
+        await navigator.share(shareData);
         toast({
           title: "📱 Gedeeld!",
           description: "Product succesvol gedeeld",
           duration: 2000,
         });
-      } else {
-        // Fallback: copy to clipboard
+      } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(window.location.href);
         toast({
           title: "🔗 Link gekopieerd!",
-          description: "Je kunt de link nu delen met vrienden",
+          description: "Je kunt de link nu delen",
           duration: 2000,
         });
+      } else {
+        throw new Error("Share and clipboard not supported");
       }
     } catch (error) {
-      // Final fallback
       const textArea = document.createElement("textarea");
       textArea.value = window.location.href;
       document.body.appendChild(textArea);
+      textArea.focus();
       textArea.select();
-      document.execCommand("copy");
+      try {
+        document.execCommand("copy");
+        toast({
+          title: "🔗 Link gekopieerd!",
+          description: "Je kunt de link nu delen",
+          duration: 2000,
+        });
+      } catch (copyError) {
+        toast({
+          title: "Fout",
+          description: "Kon link niet kopiëren of delen.",
+          variant: "destructive",
+          duration: 3000,
+        });
+      }
       document.body.removeChild(textArea);
-
-      toast({
-        title: "🔗 Link gekopieerd!",
-        description: "Je kunt de link nu delen",
-        duration: 2000,
-      });
     }
   };
 
-  return (
-    <div className="card p-8 space-y-8 overflow-hidden relative bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm border border-stone-200/50 dark:border-stone-700/50">
-      {/* 🌟 PREMIUM: Sparkle background effect */}
-      <div className="absolute inset-0 opacity-5 dark:opacity-10">
-        <div className="absolute top-4 right-4 animate-pulse">
-          <Sparkles className="w-6 h-6 text-blue-500" />
-        </div>
-        <div
-          className="absolute bottom-8 left-6 animate-pulse"
-          style={{ animationDelay: "1s" }}
-        >
-          <Star className="w-4 h-4 text-orange-500" />
-        </div>
-        <div
-          className="absolute top-1/2 right-8 animate-pulse"
-          style={{ animationDelay: "2s" }}
-        >
-          <Zap className="w-5 h-5 text-green-500" />
-        </div>
-      </div>
+  const getButtonFeedbackContent = () => {
+    if (buttonState === "adding" || isPending)
+      return (
+        <>
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Voorbereiden...
+        </>
+      );
+    if (buttonState === "loading")
+      return (
+        <>
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Toevoegen...
+        </>
+      );
+    if (buttonState === "celebrating")
+      return (
+        <>
+          <Sparkles className="w-5 h-5 mr-2 text-yellow-300 animate-ping" />{" "}
+          Gelukt!
+        </>
+      );
+    if (buttonState === "success")
+      return (
+        <>
+          <CheckCircle className="w-5 h-5 mr-2 text-green-400" /> In
+          Winkelwagen!
+        </>
+      );
+    if (buttonState === "error")
+      return (
+        <>
+          <XCircle className="w-5 h-5 mr-2 text-red-400" /> Probeer Opnieuw
+        </>
+      );
+    if (!isAvailable) return <>😔 Uitverkocht</>;
+    return (
+      <>
+        <ShoppingBag className="w-5 h-5 mr-2" /> Toevoegen
+      </>
+    );
+  };
 
-      {/* 🎯 PREMIUM: Action buttons row */}
-      <div className="flex justify-between items-center relative z-10">
-        <Badge
-          variant="secondary"
-          className="bg-gradient-to-r from-blue-100 to-orange-100 dark:from-blue-900/30 dark:to-orange-900/30 text-blue-800 dark:text-blue-200 border-0 px-3 py-1"
-        >
-          🏖️ Zomer Collectie
-        </Badge>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleWishlist}
-            className={`rounded-full w-10 h-10 transition-all duration-300 ${
-              isWishlisted
-                ? "text-red-500 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 scale-110"
-                : "text-stone-600 dark:text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-            }`}
-          >
-            <Heart
-              className={`w-4 h-4 transition-all duration-300 ${
-                isWishlisted ? "fill-current scale-110" : ""
-              }`}
-            />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleShare}
-            className="rounded-full w-10 h-10 text-stone-600 dark:text-stone-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 hover:scale-110"
-          >
-            <Share2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
+  const renderVariantOptionButtons = (option: any) => {
+    // Unieke waarden voor deze specifieke optie, rekening houdend met selecties van andere opties
+    // Dit is een complexe logica. Voor nu tonen we alle varianten als knoppen.
+    // Een betere UX zou zijn om per optie (Kleur, Maat) knoppen te tonen.
+    // De huidige `product-page-client` stuurt al de geselecteerde variant.
+    // Deze component kan zich focussen op het tonen van de opties van *die* variant,
+    // of knoppen tonen om *andere* varianten te kiezen.
 
-      {/* 💰 PREMIUM: Dynamic price display with animations */}
-      <div className="text-left relative z-10">
-        <p className="text-sm font-medium text-stone-600 dark:text-stone-400 mb-1">
-          Prijs per stuk
-        </p>
-        <div
-          className={`transition-all duration-500 ${
-            showPriceAnimation ? "scale-105" : "scale-100"
-          }`}
-        >
-          <p className="font-bold text-4xl bg-gradient-to-r from-stone-900 to-stone-700 dark:from-stone-100 dark:to-stone-300 bg-clip-text text-transparent mb-2">
-            {selectedVariant
-              ? formatPrice(
-                  selectedVariant.price.amount,
-                  selectedVariant.price.currencyCode
-                )
-              : "..."}
-          </p>
-          {qty > 1 && (
-            <div className="flex items-center gap-2 text-lg">
-              <span className="text-stone-600 dark:text-stone-400">
-                Totaal:
-              </span>
-              <span className="font-bold text-2xl bg-gradient-to-r from-blue-600 via-orange-500 to-green-600 bg-clip-text text-transparent">
-                {selectedVariant
-                  ? formatPrice(
-                      totalPrice.toString(),
-                      selectedVariant.price.currencyCode
-                    )
-                  : "..."}
-              </span>
-              <Badge
-                variant="secondary"
-                className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 border-0"
+    // Als er maar één optie is (bijv. alleen "Titel"), en meerdere varianten,
+    // dan zijn de variant.title knoppen logisch.
+    if (
+      product.options.length === 1 &&
+      product.options[0].name === "Title" &&
+      product.variants.edges.length > 1
+    ) {
+      return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {product.variants.edges.map(({ node: v }) => {
+            const variantIsAvailable = v.availableForSale;
+            const isSelected = internalSelectedVariant?.id === v.id;
+            return (
+              <button
+                key={v.id}
+                onClick={() => handleLocalVariantSelect(v.id)}
+                disabled={!variantIsAvailable}
+                aria-pressed={isSelected}
+                title={v.title}
+                className={cn(
+                  "p-2.5 rounded-md border text-xs font-medium transition-all duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-stone-900 truncate",
+                  isSelected
+                    ? "bg-blue-600 text-white border-blue-700 shadow-md scale-105"
+                    : "bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border-stone-300 dark:border-stone-600 hover:border-blue-500 dark:hover:border-blue-400",
+                  !variantIsAvailable &&
+                    "bg-stone-100 dark:bg-stone-700/50 text-stone-400 dark:text-stone-500 cursor-not-allowed line-through border-stone-200 dark:border-stone-700 hover:scale-100 opacity-70"
+                )}
               >
-                Bespaar €{(totalPrice * 0.05).toFixed(2)}
-              </Badge>
-            </div>
-          )}
+                {v.title}
+                {isSelected && (
+                  <Check className="absolute top-1 right-1 w-3 h-3 text-white/80" />
+                )}
+              </button>
+            );
+          })}
         </div>
-      </div>
+      );
+    }
+    // TODO: Implementeer een meer geavanceerde variant selector als er meerdere opties zijn (Kleur, Maat etc.)
+    return null;
+  };
 
-      {/* 🎨 PREMIUM: Enhanced variant selection */}
-      {product.variants.edges.length > 1 && (
-        <div className="space-y-4 relative z-10">
-          <label className="text-sm font-bold text-stone-800 dark:text-stone-200 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-blue-500" />
-            Kies je perfecte variant:
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            {product.variants.edges.map((v, i) => {
-              const variantIsAvailable = v.node.availableForSale;
-              const isSelected = i === variantIndex;
-              return (
-                <button
-                  key={v.node.id}
-                  onClick={() => setVariantIndex(i)}
-                  disabled={!variantIsAvailable}
-                  className={`p-4 rounded-2xl border-2 text-sm font-bold transition-all duration-300 ease-in-out transform hover:scale-105 relative overflow-hidden ${
-                    isSelected
-                      ? "bg-gradient-to-r from-stone-900 to-stone-800 dark:from-white dark:to-stone-100 text-white dark:text-stone-900 border-stone-900 dark:border-white shadow-xl scale-105"
-                      : "bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 border-stone-200 dark:border-stone-600 hover:border-stone-400 dark:hover:border-stone-400 shadow-md hover:shadow-lg"
-                  } ${
-                    !variantIsAvailable
-                      ? "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600 cursor-not-allowed line-through border-stone-100 dark:border-stone-700 hover:scale-100 opacity-60"
-                      : ""
-                  }`}
-                >
-                  {isSelected && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-orange-500/10 animate-pulse" />
-                  )}
-                  <span className="relative z-10">{v.node.title}</span>
-                  {isSelected && (
-                    <Check className="absolute top-2 right-2 w-4 h-4 text-green-400" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+  return (
+    <div className="p-6 bg-stone-50 dark:bg-stone-800/50 rounded-xl shadow-lg border border-stone-200 dark:border-stone-700/50 space-y-5">
+      {product.variants.edges.length > 1 && product.options.length > 0 && (
+        <div>
+          {product.options.map((option) => (
+            <div key={option.id} className="mb-3">
+              <label className="text-xs font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-1.5 mb-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                Kies {option.name.toLowerCase()}:
+                {internalSelectedVariant?.selectedOptions.find(
+                  (so) => so.name === option.name
+                )?.value && (
+                  <span className="text-blue-600 dark:text-blue-400 font-bold ml-1">
+                    (
+                    {
+                      internalSelectedVariant?.selectedOptions.find(
+                        (so) => so.name === option.name
+                      )?.value
+                    }
+                    )
+                  </span>
+                )}
+              </label>
+              {renderVariantOptionButtons(option)}
+            </div>
+          ))}
+          {!internalSelectedVariant && product.variants.edges.length > 0 && (
+            <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1">
+              <Info size={14} /> Selecteer een variant hierboven.
+            </p>
+          )}
         </div>
       )}
 
-      {/* 🔢 PREMIUM: Quantity selector with stock intelligence */}
-      <div className="space-y-4 relative z-10">
-        <label className="text-sm font-bold text-stone-800 dark:text-stone-200 flex items-center gap-2">
-          <Zap className="w-4 h-4 text-orange-500" />
-          Aantal stuks:
+      <div className="space-y-1.5">
+        <label
+          htmlFor={`quantity-${product.id}`}
+          className="text-xs font-semibold text-stone-700 dark:text-stone-300 flex items-center gap-1.5"
+        >
+          <Zap className="w-3.5 h-3.5 text-orange-500" />
+          Aantal:
         </label>
         <div className="flex items-center justify-between">
-          <div className="flex items-center bg-gradient-to-r from-stone-50 to-stone-100 dark:from-stone-800 dark:to-stone-700 rounded-2xl border-2 border-stone-200 dark:border-stone-600 p-1">
+          <div className="flex items-center bg-white dark:bg-stone-700/60 rounded-lg border border-stone-300 dark:border-stone-600 p-0.5">
             <Button
               variant="ghost"
-              size="sm"
-              className="rounded-xl w-12 h-12 hover:bg-white dark:hover:bg-stone-600 transition-all duration-200 hover:scale-110"
+              size="icon"
+              className="rounded-md w-9 h-9 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-600"
               onClick={() => setQty(Math.max(1, qty - 1))}
-              disabled={!isAvailable || buttonState === "loading" || qty <= 1}
+              disabled={
+                !isAvailable ||
+                buttonState === "loading" ||
+                qty <= 1 ||
+                isPending
+              }
+              aria-label="Verminder aantal"
             >
-              <Minus className="w-5 h-5" />
+              <Minus className="w-4 h-4" />
             </Button>
-            <div className="w-16 text-center">
-              <span className="font-bold text-2xl text-stone-900 dark:text-stone-100 transition-all duration-300">
-                {qty}
-              </span>
-            </div>
+            <input
+              id={`quantity-${product.id}`}
+              type="number"
+              value={qty}
+              onChange={(e) =>
+                setQty(Math.max(1, Number.parseInt(e.target.value, 10) || 1))
+              }
+              className="w-10 text-center font-semibold text-sm text-stone-900 dark:text-stone-100 bg-transparent border-none focus:ring-0 appearance-none [-moz-appearance:textfield]"
+              aria-live="polite"
+              disabled={!isAvailable || buttonState === "loading" || isPending}
+            />
             <Button
               variant="ghost"
-              size="sm"
-              className="rounded-xl w-12 h-12 hover:bg-white dark:hover:bg-stone-600 transition-all duration-200 hover:scale-110"
+              size="icon"
+              className="rounded-md w-9 h-9 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-600"
               onClick={() => setQty(qty + 1)}
               disabled={
                 !isAvailable ||
                 (stockQuantity > 0 && qty >= stockQuantity) ||
-                buttonState === "loading"
+                buttonState === "loading" ||
+                isPending
               }
+              aria-label="Verhoog aantal"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4" />
             </Button>
           </div>
 
-          {/* 🚨 PREMIUM: Smart stock indicators */}
-          {isAvailable && (
-            <div className="flex flex-col items-end">
+          {isAvailable && stockQuantity > 0 && (
+            <div className="text-right">
               {urgencyLevel === "high" && (
-                <Badge className="bg-red-600 text-white animate-pulse mb-1 border-0">
+                <Badge variant="destructive" className="text-xs animate-pulse">
                   🔥 Laatste {stockQuantity}!
                 </Badge>
               )}
               {urgencyLevel === "medium" && (
-                <Badge className="bg-orange-600 text-white mb-1 border-0">
-                  ⚡ Nog {stockQuantity} op voorraad
+                <Badge variant="outline" className="text-xs">
+                  ⚡ Nog {stockQuantity}
                 </Badge>
               )}
-              {urgencyLevel === "low" && stockQuantity > 0 && (
-                <Badge className="bg-green-600 text-white mb-1 border-0">
-                  ✅ Ruim op voorraad
+              {urgencyLevel === "low" && (
+                <Badge variant="default" className="text-xs">
+                  ✅ Op voorraad
                 </Badge>
               )}
             </div>
           )}
           {!isAvailable && (
-            <Badge className="bg-stone-600 text-white border-0">
+            <Badge variant="outline" className="text-xs">
               😔 Uitverkocht
             </Badge>
           )}
         </div>
       </div>
 
-      {/* 🛒 PREMIUM: The Ultimate CTA Button */}
-      <div className="relative z-10">
+      <div className="space-y-2.5">
         <Button
-          className={`w-full text-lg font-bold py-8 rounded-2xl transition-all duration-500 ease-in-out transform hover:scale-[1.02] active:scale-[0.98] shadow-xl hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-offset-4 flex items-center justify-center gap-4 relative overflow-hidden
-          ${
-            buttonState === "adding" &&
-            "bg-blue-600 text-white scale-105 shadow-2xl"
-          }
-          ${
-            buttonState === "loading" &&
-            "bg-blue-700 text-white cursor-wait scale-105"
-          }
-          ${
+          size="lg"
+          className={cn(
+            "w-full text-sm font-semibold py-3 rounded-lg transition-all duration-200 ease-in-out transform hover:scale-[1.01] active:scale-[0.99] shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-stone-800 flex items-center justify-center gap-2",
+            buttonState === "idle" &&
+              isAvailable &&
+              "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500",
+            buttonState === "idle" &&
+              !isAvailable &&
+              "bg-stone-300 dark:bg-stone-600 text-stone-500 dark:text-stone-400 cursor-not-allowed shadow-none",
+            (buttonState === "adding" || buttonState === "loading") &&
+              "bg-sky-500 text-white cursor-wait",
             buttonState === "celebrating" &&
-            "bg-gradient-to-r from-green-500 to-blue-500 text-white scale-110 shadow-2xl"
-          }
-          ${
+              "bg-gradient-to-r from-green-500 to-emerald-400 text-white scale-105",
             buttonState === "success" &&
-            "bg-green-600 hover:bg-green-600 focus:ring-green-500 text-white scale-105"
-          }
-          ${
+              "bg-green-500 hover:bg-green-600 focus:ring-green-400 text-white",
             buttonState === "error" &&
-            "bg-red-600 hover:bg-red-600 focus:ring-red-500 text-white"
-          }
-          ${
-            buttonState === "idle" &&
-            !isAvailable &&
-            "bg-stone-300 dark:bg-stone-700 text-stone-500 dark:text-stone-400 cursor-not-allowed hover:scale-100 shadow-none"
-          }
-          ${
-            buttonState === "idle" &&
-            isAvailable &&
-            "bg-gradient-to-r from-stone-900 to-stone-800 dark:from-white dark:to-stone-100 text-white dark:text-stone-900 hover:from-stone-800 hover:to-stone-700 dark:hover:from-stone-100 dark:hover:to-stone-200 focus:ring-stone-400"
-          }
-          `}
+              "bg-red-500 hover:bg-red-600 focus:ring-red-400 text-white"
+          )}
           disabled={
             !isAvailable ||
-            (buttonState !== "idle" && buttonState !== "success")
+            buttonState === "adding" ||
+            buttonState === "loading" ||
+            isPending
           }
           onClick={handleAdd}
         >
-          {/* 🎭 PREMIUM: Dynamic button content */}
-          {buttonState === "adding" && (
-            <>
-              <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
-              <span>Voorbereiden...</span>
-            </>
-          )}
-          {buttonState === "loading" && (
-            <>
-              <Loader2 className="animate-spin w-6 h-6" />
-              <span>Toevoegen...</span>
-            </>
-          )}
-          {buttonState === "celebrating" && (
-            <>
-              <div className="animate-bounce">🎉</div>
-              <span>Gelukt!</span>
-            </>
-          )}
-          {buttonState === "success" && (
-            <>
-              <Check className="w-6 h-6 animate-pulse" />
-              <span>In Winkelwagen!</span>
-            </>
-          )}
-          {buttonState === "error" && (
-            <>
-              <RotateCcw className="w-6 h-6" />
-              <span>Probeer Opnieuw</span>
-            </>
-          )}
-          {buttonState === "idle" && isAvailable && (
-            <>
-              <ShoppingBag className="w-6 h-6" />
-              <span>Toevoegen aan Winkelwagen</span>
-            </>
-          )}
-          {buttonState === "idle" && !isAvailable && (
-            <>
-              <span>😔 Uitverkocht</span>
-            </>
-          )}
-
-          {/* 🌟 PREMIUM: Button shine effect */}
-          {buttonState === "idle" && isAvailable && (
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 animate-pulse opacity-0 hover:opacity-100 transition-opacity duration-1000" />
-          )}
+          {getButtonFeedbackContent()}
         </Button>
+        <div className="flex gap-2.5">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleWishlist}
+            className="flex-1 py-3 text-xs border-stone-300 dark:border-stone-600 hover:border-red-500 dark:hover:border-red-400 hover:text-red-500 dark:hover:text-red-400 focus:ring-red-400"
+            aria-label={
+              isWishlisted
+                ? "Verwijder van verlanglijst"
+                : "Voeg toe aan verlanglijst"
+            }
+          >
+            <Heart
+              className={cn(
+                "w-4 h-4 mr-1.5 transition-colors",
+                isWishlisted && "fill-red-500 text-red-500"
+              )}
+            />
+            {isWishlisted ? "Bewaard" : "Bewaar"}
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleShare}
+            className="flex-1 py-3 text-xs border-stone-300 dark:border-stone-600 hover:border-sky-500 dark:hover:border-sky-400 hover:text-sky-500 dark:hover:text-sky-400 focus:ring-sky-400"
+            aria-label="Deel product"
+          >
+            <Share2 className="w-4 h-4 mr-1.5" />
+            Deel
+          </Button>
+        </div>
       </div>
 
-      {/* 🎁 PREMIUM: Enhanced product benefits */}
-      <div className="pt-6 border-t border-stone-200 dark:border-stone-700 space-y-4 relative z-10">
-        <h4 className="font-bold text-lg text-stone-900 dark:text-stone-100 flex items-center gap-2">
-          <Shield className="w-5 h-5 text-blue-500" />
-          Waarom bij ons kopen?
+      <div className="pt-5 border-t border-stone-200 dark:border-stone-700/50 space-y-3">
+        <h4 className="text-xs font-semibold text-stone-800 dark:text-stone-200 flex items-center gap-1.5">
+          <Shield className="w-4 h-4 text-blue-500" />
+          Waarom bij Cocúfum?
         </h4>
-
-        <div className="grid grid-cols-1 gap-4">
-          <div className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border border-green-200 dark:border-green-700">
-            <div className="flex items-center gap-3">
-              <Truck className="w-5 h-5 text-green-600" />
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                Gratis verzending
-              </span>
-            </div>
-            <Badge className="bg-green-600 text-white border-0">
-              vanaf €75
-            </Badge>
-          </div>
-
-          <div className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-blue-50 to-orange-50 dark:from-blue-900/20 dark:to-orange-900/20 border border-blue-200 dark:border-blue-700">
-            <div className="flex items-center gap-3">
-              <RotateCcw className="w-5 h-5 text-blue-600" />
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                Retourneren
-              </span>
-            </div>
-            <Badge className="bg-blue-600 text-white border-0">14 dagen</Badge>
-          </div>
-
-          <div className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border border-orange-200 dark:border-orange-700">
-            <div className="flex items-center gap-3">
-              <Zap className="w-5 h-5 text-orange-600" />
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                Snelle levering
-              </span>
-            </div>
-            <Badge className="bg-orange-600 text-white border-0">
-              1-2 dagen
-            </Badge>
-          </div>
-        </div>
-
-        {/* 🏆 PREMIUM: Trust indicators */}
-        <div className="flex items-center justify-center gap-4 pt-4">
-          <div className="flex items-center gap-1">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className="w-4 h-4 fill-yellow-400 text-yellow-400"
+        <div className="grid grid-cols-1 gap-2 text-xs">
+          {[
+            {
+              icon: Truck,
+              text: "Gratis verzending",
+              detail: "vanaf €75",
+              color: "green",
+            },
+            {
+              icon: RotateCcw,
+              text: "Eenvoudig retourneren",
+              detail: "14 dagen",
+              color: "blue",
+            },
+            {
+              icon: Zap,
+              text: "Snelle levering",
+              detail: "1-2 werkdagen",
+              color: "orange",
+            },
+          ].map((item) => (
+            <div
+              key={item.text}
+              className="flex items-center gap-2 p-2 rounded-md bg-white dark:bg-stone-700/50 border border-stone-200 dark:border-stone-600/50"
+            >
+              <item.icon
+                className={`w-4 h-4 text-${item.color}-500 flex-shrink-0`}
               />
-            ))}
-            <span className="text-sm font-medium text-stone-600 dark:text-stone-400 ml-2">
-              4.9/5 (2.847 reviews)
-            </span>
-          </div>
+              <div>
+                <span
+                  className={`font-medium text-stone-700 dark:text-stone-300`}
+                >
+                  {item.text}
+                </span>
+                <span
+                  className={`block text-xs text-stone-500 dark:text-stone-400`}
+                >
+                  {item.detail}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

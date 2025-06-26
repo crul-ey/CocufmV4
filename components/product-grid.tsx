@@ -1,126 +1,91 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ChevronDown, Filter, SortAsc, Star } from "lucide-react";
+import type React from "react";
+import { useState, useEffect, useMemo } from "react";
+import { ChevronDown, FilterIcon, SortAsc, Star, X } from "lucide-react"; // FilterIcon hernoemd
 import ProductCard from "@/components/product-card";
 import ProductCategoryFilter, {
   type ProductCategory,
-} from "@/components/product-category-filter";
+} from "@/components/product-category-filter"; // Jouw versie
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ShopifyProduct } from "@/lib/shopify";
+import { cn } from "@/lib/utils";
 
-interface ProductGridProps {
-  products: ShopifyProduct[];
-  title?: string;
-  showFilters?: boolean;
-}
-
-type SortOption =
+type SortOptionValue =
   | "featured"
   | "price-low"
   | "price-high"
   | "name"
-  | "availability";
+  | "availability"
+  | "newest";
+
+interface SortOption {
+  value: SortOptionValue;
+  label: string;
+  icon: React.ElementType;
+}
+
+interface ProductGridProps {
+  products: ShopifyProduct[]; // Alle producten voor initiële staat en "alles" filter
+  showFilters?: boolean; // Optionele prop
+  // title?: string; // Verwijderd, titel komt nu van de pagina zelf
+}
 
 export default function ProductGrid({
   products,
-  title,
   showFilters = true,
 }: ProductGridProps) {
-  const [sortedProducts, setSortedProducts] =
+  const [activeCategory, setActiveCategory] = useState<ProductCategory>("all");
+  // Sla de producten op die door de categorie filter zijn gefilterd
+  const [productsAfterCategoryFilter, setProductsAfterCategoryFilter] =
     useState<ShopifyProduct[]>(products);
-  const [sortBy, setSortBy] = useState<SortOption>("featured");
-  const [selectedCategory, setSelectedCategory] =
-    useState<ProductCategory>("all");
+  const [sortOption, setSortOption] = useState<SortOptionValue>("featured");
+  const [displayedProducts, setDisplayedProducts] =
+    useState<ShopifyProduct[]>(products);
 
-  const handleCategoryFilter = (
-    category: ProductCategory,
-    filteredProducts: ShopifyProduct[]
+  const sortOptionsList: SortOption[] = [
+    { value: "featured", label: "Uitgelicht", icon: Star },
+    { value: "newest", label: "Nieuwste eerst", icon: SortAsc }, // Gebruik createdAt of publishedAt
+    { value: "availability", label: "Beschikbaarheid", icon: Star },
+    { value: "price-low", label: "Prijs: Laag naar Hoog", icon: SortAsc },
+    { value: "price-high", label: "Prijs: Hoog naar Laag", icon: SortAsc },
+    { value: "name", label: "Naam A-Z", icon: SortAsc },
+  ];
+
+  const currentSortLabel = useMemo(() => {
+    return (
+      sortOptionsList.find((opt) => opt.value === sortOption)?.label ||
+      "Sorteer"
+    );
+  }, [sortOption]);
+
+  // Handler voor wanneer de categorie verandert via jouw ProductCategoryFilter
+  const handleCategoryChange = (
+    newCategory: ProductCategory,
+    filteredProductsFromCategory: ShopifyProduct[]
   ) => {
-    setSelectedCategory(category);
-    // Apply current sorting to filtered products
-    const sorted = [...filteredProducts].sort((a, b) => {
-      switch (sortBy) {
-        case "price-low":
-          return (
-            Number.parseFloat(a.priceRange.minVariantPrice.amount) -
-            Number.parseFloat(b.priceRange.minVariantPrice.amount)
-          );
-        case "price-high":
-          return (
-            Number.parseFloat(b.priceRange.minVariantPrice.amount) -
-            Number.parseFloat(a.priceRange.minVariantPrice.amount)
-          );
-        case "name":
-          return a.title.localeCompare(b.title, "nl", { sensitivity: "base" });
-        case "availability":
-          const aAvailable = a.variants.edges.some(
-            (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
-          const bAvailable = b.variants.edges.some(
-            (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
-          if (aAvailable !== bAvailable) {
-            return bAvailable - aAvailable;
-          }
-          return a.title.localeCompare(b.title, "nl", { sensitivity: "base" });
-        default:
-          const aHasAvailable = a.variants.edges.some(
-            (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
-          const bHasAvailable = b.variants.edges.some(
-            (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
-          if (aHasAvailable !== bHasAvailable) {
-            return bHasAvailable - aHasAvailable;
-          }
-          return 0;
-      }
-    });
-    setSortedProducts(sorted);
+    setActiveCategory(newCategory);
+    setProductsAfterCategoryFilter(filteredProductsFromCategory);
   };
 
+  // Effect om te sorteren wanneer productsAfterCategoryFilter of sortOption verandert
   useEffect(() => {
-    // Re-apply current category filter when sort changes
-    let filtered = products;
+    const sorted = [...productsAfterCategoryFilter].sort((a, b) => {
+      // Zorg dat createdAt en publishedAt bestaan en valide dates zijn voor sortering
+      const aCreatedAt = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bCreatedAt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      // const aPublishedAt = a.publishedAt ? new Date(a.publishedAt).getTime() : 0; // Als je publishedAt gebruikt voor sorteren
+      // const bPublishedAt = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
 
-    if (selectedCategory !== "all") {
-      // Filter products based on selected category
-      filtered = products.filter((product) => {
-        const productTags = product.tags || [];
-        switch (selectedCategory) {
-          case "beauty-oils":
-            return productTags.includes("oils-supplier");
-          case "beach-lifestyle":
-            return productTags.includes("towels-supplier");
-          case "sun-protection":
-            return productTags.includes("bigbuy-supplier");
-          case "wine-beach":
-            return productTags.includes("wine-strand-accessories");
-          case "parfum":
-            return productTags.includes("parfum-supplier");
-          default:
-            return true;
-        }
-      });
-    }
-
-    const sorted = [...filtered].sort((a, b) => {
-      switch (sortBy) {
+      switch (sortOption) {
         case "price-low":
           return (
             Number.parseFloat(a.priceRange.minVariantPrice.amount) -
@@ -136,109 +101,115 @@ export default function ProductGrid({
         case "availability":
           const aAvailable = a.variants.edges.some(
             (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
+          );
           const bAvailable = b.variants.edges.some(
             (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
-          if (aAvailable !== bAvailable) {
-            return bAvailable - aAvailable;
-          }
-          return a.title.localeCompare(b.title, "nl", { sensitivity: "base" });
+          );
+          if (aAvailable !== bAvailable) return bAvailable ? 1 : -1;
+          return bCreatedAt - aCreatedAt; // Fallback op nieuwste
+        case "newest":
+          return bCreatedAt - aCreatedAt;
+        case "featured":
         default:
-          const aHasAvailable = a.variants.edges.some(
+          const aFeatAvailable = a.variants.edges.some(
             (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
-          const bHasAvailable = b.variants.edges.some(
+          );
+          const bFeatAvailable = b.variants.edges.some(
             (edge) => edge.node.availableForSale
-          )
-            ? 1
-            : 0;
-          if (aHasAvailable !== bHasAvailable) {
-            return bHasAvailable - aHasAvailable;
-          }
-          return 0;
+          );
+          if (aFeatAvailable !== bFeatAvailable) return bFeatAvailable ? 1 : -1;
+          return bCreatedAt - aCreatedAt; // Fallback op nieuwste
       }
     });
+    setDisplayedProducts(sorted);
+  }, [productsAfterCategoryFilter, sortOption]);
 
-    setSortedProducts(sorted);
-  }, [products, sortBy, selectedCategory]);
+  // Reset naar "Alle Producten" als de hoofd `products` prop verandert (bijv. bij navigatie)
+  useEffect(() => {
+    setActiveCategory("all");
+    setProductsAfterCategoryFilter(products);
+  }, [products]);
 
-  const sortOptions = [
-    { value: "featured" as const, label: "Uitgelicht", icon: Star },
-    { value: "availability" as const, label: "Beschikbaarheid", icon: Star },
-    {
-      value: "price-low" as const,
-      label: "Prijs: Laag naar Hoog",
-      icon: SortAsc,
-    },
-    {
-      value: "price-high" as const,
-      label: "Prijs: Hoog naar Laag",
-      icon: SortAsc,
-    },
-    { value: "name" as const, label: "Naam A-Z", icon: SortAsc },
-  ];
+  const handleClearFilters = () => {
+    setActiveCategory("all"); // Dit triggert jouw ProductCategoryFilter om onFilterChangeAction aan te roepen met alle producten
+    setSortOption("featured");
+    // De onFilterChangeAction van jouw component zou productsAfterCategoryFilter moeten updaten naar alle producten
+  };
+
+  const activeFiltersCount =
+    (activeCategory !== "all" ? 1 : 0) + (sortOption !== "featured" ? 1 : 0);
 
   return (
     <div className="space-y-6">
-      {title && (
-        <div className="text-center">
-          <h2 className="font-serif text-2xl lg:text-3xl font-bold text-stone-900 dark:text-stone-100 mb-2">
-            {title}
-          </h2>
-          <div className="w-24 h-0.5 bg-stone-300 dark:bg-stone-600 mx-auto"></div>
-        </div>
-      )}
-
       {showFilters && (
-        <div className="space-y-4">
-          {/* Category Filter */}
+        <div className="mb-8 p-4 sm:p-6 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-200 dark:border-stone-700 shadow-sm">
           <ProductCategoryFilter
-            products={products}
-            activeCategory={selectedCategory}
-            onFilterChangeAction={handleCategoryFilter}
+            products={products} // Geef alle producten mee voor de tellingen in jouw filter
+            activeCategory={activeCategory}
+            onFilterChangeAction={handleCategoryChange} // Gebruik de prop naam van jouw component
           />
-
-          {/* Sort Dropdown */}
-          <div className="flex justify-end">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-stone-600 dark:text-stone-400" />
+          <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300">
+              <FilterIcon className="w-4 h-4" />
+              <span>
+                {displayedProducts.length} product
+                {displayedProducts.length !== 1 ? "en" : ""} gevonden
+                {activeCategory !== "all" &&
+                  ` in "${
+                    (ProductCategoryFilter as any).categories?.find(
+                      (c: any) => c.id === activeCategory
+                    )?.name || activeCategory
+                  }"`}
+                {/* Dit is een beetje een hack om bij de 'categories' array te komen als die intern is. Beter is om CATEGORIES_CONFIG te exporteren. */}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {activeFiltersCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 p-2 h-auto font-semibold hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                >
+                  <X className="w-3 h-3 mr-1.5" />
+                  Wis filters ({activeFiltersCount})
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="min-w-[180px] justify-between hover:bg-stone-50 dark:hover:bg-stone-800 font-semibold bg-white dark:bg-stone-900 border-2"
+                    className="min-w-[180px] justify-between bg-white dark:bg-stone-700 hover:bg-stone-100 dark:hover:bg-stone-600 border-stone-300 dark:border-stone-600"
                   >
-                    {
-                      sortOptions.find((option) => option.value === sortBy)
-                        ?.label
-                    }
-                    <ChevronDown className="w-4 h-4" />
+                    <span className="truncate">{currentSortLabel}</span>
+                    <ChevronDown className="w-4 h-4 ml-2 opacity-70" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-56 bg-white dark:bg-stone-900 border-2"
+                  className="w-56 bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700"
                 >
-                  {sortOptions.map((option) => (
+                  <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-stone-500 dark:text-stone-400">
+                    Sorteer op
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-stone-200 dark:bg-stone-700" />
+                  {sortOptionsList.map((option) => (
                     <DropdownMenuItem
                       key={option.value}
-                      onClick={() => setSortBy(option.value)}
-                      className={`cursor-pointer font-medium ${
-                        sortBy === option.value
-                          ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100"
-                          : "text-stone-700 dark:text-stone-300"
-                      }`}
+                      onClick={() => setSortOption(option.value)}
+                      className={cn(
+                        "flex items-center gap-2 cursor-pointer px-2 py-2 text-sm",
+                        "focus:bg-stone-100 dark:focus:bg-stone-700",
+                        sortOption === option.value
+                          ? "bg-stone-100 dark:bg-stone-700 font-semibold"
+                          : "hover:bg-stone-50 dark:hover:bg-stone-700/70"
+                      )}
                     >
-                      <option.icon className="w-4 h-4 mr-2" />
-                      {option.label}
+                      <option.icon className="w-4 h-4 text-stone-600 dark:text-stone-300" />
+                      <span className="text-stone-700 dark:text-stone-200">
+                        {option.label}
+                      </span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -248,62 +219,31 @@ export default function ProductGrid({
         </div>
       )}
 
-      {/* Products Count */}
-      <div className="flex items-center justify-between text-sm font-semibold">
-        <span className="text-stone-700 dark:text-stone-300">
-          {sortedProducts.length} product
-          {sortedProducts.length !== 1 ? "en" : ""} gevonden
-          {selectedCategory !== "all" && ` in geselecteerde categorie`}
-        </span>
-        <span className="hidden sm:block text-stone-600 dark:text-stone-400">
-          Gesorteerd op:{" "}
-          {sortOptions.find((option) => option.value === sortBy)?.label}
-        </span>
-      </div>
-
-      {/* Product Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8">
-        {sortedProducts.map((product, index) => (
-          <div
-            key={product.id}
-            className="animate-fade-in-up"
-            style={{ animationDelay: `${index * 0.05}s` }}
-          >
-            <ProductCard product={product} />
-          </div>
-        ))}
-      </div>
-
-      {/* No Results State */}
-      {sortedProducts.length === 0 && (
-        <div className="text-center py-16">
-          <div className="w-24 h-24 bg-stone-100 dark:bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Filter className="w-12 h-12 text-stone-400" />
-          </div>
-          <h3 className="text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2">
+      {displayedProducts.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8">
+          {displayedProducts.map((product, index) => (
+            <div
+              key={product.id}
+              className="animate-fade-in-up"
+              style={{ animationDelay: `${index * 0.05}s` }}
+            >
+              <ProductCard product={product} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16 border border-dashed border-stone-300 dark:border-stone-700 rounded-xl">
+          <FilterIcon className="w-16 h-16 text-stone-400 dark:text-stone-500 mx-auto mb-6" />
+          <h3 className="text-xl font-semibold text-stone-800 dark:text-stone-200 mb-2">
             Geen producten gevonden
           </h3>
           <p className="text-stone-600 dark:text-stone-400 mb-6 max-w-md mx-auto">
-            Er zijn geen producten die voldoen aan je huidige filters. Probeer
-            andere filters of wis alle filters.
+            Probeer je selectie aan te passen of wis de filters om alle
+            producten te zien.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedCategory("all");
-                setSortBy("featured");
-              }}
-            >
-              Alle filters wissen
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setSelectedCategory("all")}
-            >
-              Toon alle producten
-            </Button>
-          </div>
+          <Button variant="outline" onClick={handleClearFilters}>
+            Alle filters wissen & Toon alles
+          </Button>
         </div>
       )}
     </div>
