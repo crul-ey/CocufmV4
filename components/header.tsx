@@ -17,6 +17,7 @@ import {
   Gift,
   Phone,
   Info,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ const EnhancedCartDrawer = dynamic(() => import("@/components/cart-drawer"), {
 
 const navigation = [
   { name: "Home", href: "/", icon: Home },
+  { name: "Landing", href: "/landing", icon: Sparkles }, // Add this line
   { name: "Shop", href: "/shop", icon: ShoppingBag },
   { name: "Cadeaus", href: "/cadeaus", icon: Gift },
   { name: "Bestelstatus", href: "/bestelstatus", icon: Info },

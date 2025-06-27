@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useActionState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useFormState } from "react-dom";
 import {
   Dialog,
   DialogContent,
@@ -41,10 +42,8 @@ export function FeedbackModal({
   open,
   onOpenChangeAction,
 }: FeedbackModalProps) {
-  const [state, formAction, isPending] = useActionState(
-    submitFeedback,
-    initialState
-  );
+  const [state, formAction] = useFormState(submitFeedback, initialState);
+  const [isPending, setIsPending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -97,6 +96,12 @@ export function FeedbackModal({
     );
   };
 
+  const handleSubmit = async (formData: FormData) => {
+    setIsPending(true);
+    await formAction(formData);
+    setIsPending(false);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChangeAction}>
       <DialogContent className="sm:max-w-lg bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700 shadow-2xl rounded-xl">
@@ -140,7 +145,7 @@ export function FeedbackModal({
             </p>
           </div>
         ) : (
-          <form action={formAction} ref={formRef} className="space-y-6 py-2">
+          <form action={handleSubmit} ref={formRef} className="space-y-6 py-2">
             <div>
               <Label
                 htmlFor="newProducts"

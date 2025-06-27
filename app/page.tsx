@@ -314,6 +314,36 @@ export default async function HomePage() {
                 </Button>
               </div>
             </div>
+
+            {/* CTA Section - Add this after the existing CTA in the featured products section */}
+            <div className="text-center animate-fade-in-up mt-12">
+              <div className="bg-gradient-to-r from-amber-100 to-stone-100 dark:from-amber-900/30 dark:to-stone-800/30 p-8 rounded-3xl border border-amber-200 dark:border-amber-800/50 max-w-2xl mx-auto">
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <Sparkles className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                  <Badge className="bg-amber-600 text-white font-bold">
+                    Nieuw!
+                  </Badge>
+                </div>
+                <h3 className="text-2xl font-bold text-stone-900 dark:text-stone-100 mb-4">
+                  Ontdek Onze Exclusieve Landing Experience
+                </h3>
+                <p className="text-stone-600 dark:text-stone-400 mb-6">
+                  Een volledig nieuwe manier om onze premium collectie te
+                  ontdekken. Speciaal ontworpen voor de beste shopping ervaring.
+                </p>
+                <Button
+                  asChild
+                  size="lg"
+                  className="bg-gradient-to-r from-amber-600 to-stone-700 hover:from-amber-700 hover:to-stone-800 text-white px-8 py-4 text-lg font-semibold rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+                >
+                  <Link href="/landing">
+                    <Sparkles className="mr-2 w-5 h-5" />
+                    Bekijk Landing Experience
+                    <ArrowRight className="ml-2 w-5 h-5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
           </div>
         </section>
 

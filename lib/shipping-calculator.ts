@@ -59,10 +59,10 @@ export const SUPPLIERS: SupplierConfig[] = [
   },
   {
     id: "bigbuy-supplier",
-    name: "Zonbescherming",
+    name: "Zonbescherming & parfums",
     tag: "bigbuy-supplier",
     color: "orange",
-    icon: "☀️",
+    icon: "☀️🧴",
     shippingRule: {
       id: "bigbuy-shipping",
       name: "Zonbescherming Verzending",
